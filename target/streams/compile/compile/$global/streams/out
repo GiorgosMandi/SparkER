@@ -1,0 +1,4 @@
+[0m[[0m[33mwarn[0m] [0m[0m/home/giorgosmandi/Documents/ExtremeEarth/JedAI/SparkER/src/main/scala-2.11/Experiments/EntityResolution.scala:65:24: a pure expression does nothing in statement position; you may be omitting necessary parentheses[0m
+[0m[[0m[33mwarn[0m] [0m[0m      if (useEntropy) {blocksAfterFiltering[0m
+[0m[[0m[33mwarn[0m] [0m[0m                       ^[0m
+[0m[[0m[33mwarn[0m] [0m[0mone warning found[0m

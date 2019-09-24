@@ -1,0 +1,22 @@
+Manifest-Version: 1.0
+Export-Package: org.jgrapht,org.jgrapht.alg,org.jgrapht.alg.util,org.j
+ grapht.demo,org.jgrapht.event,org.jgrapht.experimental,org.jgrapht.ex
+ perimental.alg,org.jgrapht.experimental.alg.color,org.jgrapht.experim
+ ental.equivalence,org.jgrapht.experimental.isomorphism,org.jgrapht.ex
+ perimental.permutation,org.jgrapht.experimental.touchgraph,org.jgraph
+ t.ext,org.jgrapht.generate,org.jgrapht.graph,org.jgrapht.traverse,org
+ .jgrapht.util
+Bundle-ClassPath: .,lib/xmlunit1.0.jar,lib/jgraph.jar,lib/TGGraphLayou
+ t.jar,lib/junit.jar
+Built-By: isaac
+Bundle-Name: JGraphT Plugin
+Created-By: Apache Maven 3.1.0
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Bundle-Vendor: Barak Naveh, John V. Sichi and contributors (see http:/
+ /sourceforge.net/projects/jgrapht/)
+Build-Jdk: 1.7.0_40
+Bundle-Version: 0.8.4.dev
+Bundle-ManifestVersion: 2
+Bundle-SymbolicName: org.jgrapht;singleton:=true
+Archiver-Version: Plexus Archiver
+
