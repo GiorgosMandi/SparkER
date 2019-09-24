@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Implementation-Vendor: org.scala-graph
-Implementation-Title: Graph Core
-Implementation-Version: 1.11.1
-Implementation-Vendor-Id: org.scala-graph
-Specification-Vendor: org.scala-graph
-Specification-Title: Graph Core
-Specification-Version: 1.11.1
-
