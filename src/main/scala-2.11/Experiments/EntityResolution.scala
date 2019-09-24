@@ -5,8 +5,9 @@ import java.util.Calendar
 import SparkER.BlockBuildingMethods.TokenBlocking
 import SparkER.BlockRefinementMethods.PruningMethods.{PruningUtils, WNP}
 import SparkER.BlockRefinementMethods.{BlockFiltering, BlockPurging}
-import SparkER.DataStructures.Profile
+import SparkER.DataStructures.{Profile, WeightedEdge}
 import SparkER.EntityClustering.{CenterClustering, EntityClusterUtils}
+import SparkER.EntityMatching.EntityMatcher.compare
 import SparkER.EntityMatching.{EntityMatcher, MatchingFunctions}
 import SparkER.Utilities.Converters
 import org.apache.log4j.Logger
@@ -217,6 +218,64 @@ object EntityResolution {
           //comparisonsAndProfilesPerPartitionRDD.cache
 
           EntityMatcher.entityMatchComparisons(comparisonsAndProfilesPerPartitionRDD, threshold = 0.5, matchingFunction = MatchingFunctions.jaccardSimilarity)
+
+        case "TD" =>
+          val profilesPairs = sc.broadcast(candidatePairs.map(cp => (cp.firstProfileID, cp.secondProfileID)).collect())
+
+          val k = profiles.getNumPartitions
+          val l = ((-1 + math.sqrt(1 + 8 * k))/2).asInstanceOf[Int]
+
+          def getPartitionID(p:Int, q:Int) : Int = {
+            val id = (2 * l - p + 2) * (p - 1)/2 + (q - p + 1)
+            id.asInstanceOf[Int]
+          }
+
+          val distributedProfilesRDD = profiles
+            .map {
+              p =>
+                var partitionIDs : Set[Int] = Set[Int]()
+                val rand = scala.util.Random
+                rand.setSeed(p.id)
+                val anchor = rand.nextInt(l) + 1
+                for (p <- 1 to anchor) partitionIDs += getPartitionID(p, anchor)
+                for (q <- anchor to l) partitionIDs += getPartitionID(anchor, q)
+                (partitionIDs, p, anchor)
+            }
+            .flatMap {
+              profileAndPartitionIDs =>
+                val profileMap = Map(profileAndPartitionIDs._2.asInstanceOf[Profile].id -> (profileAndPartitionIDs._2, profileAndPartitionIDs._3))
+                profileAndPartitionIDs._1.map(partitionID => (partitionID, profileMap))
+            }
+            .reduceByKey(_++_)
+
+         distributedProfilesRDD
+            .flatMap {
+              partitionProfiles =>
+                val partitionID = partitionProfiles._1
+                val profilesMap = partitionProfiles._2
+                profilesPairs.value.map {
+                  pair =>
+                    val profileID1 = pair._1
+                    val profileID2 = pair._2
+
+                    if (profilesMap.contains(profileID1) && profilesMap.contains(profileID2)) {
+                      val profile1 = profilesMap(profileID1)._1
+                      val profile2 = profilesMap(profileID2)._1
+                      val anchor_1 = profilesMap(profileID1)._2
+                      val anchor_2 = profilesMap(profileID2)._2
+                      if (anchor_1 == anchor_2) {
+                        if (anchor_1 == partitionID) compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
+                        else null
+                      }
+                      else
+                        compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
+                    }
+                    else null
+                }
+            }
+           .filter(_ != null)
+           .filter(_.weight >= 0.5)
+
 
         case _ =>
           //Entity matching: just a preliminary test
