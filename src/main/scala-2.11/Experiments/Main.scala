@@ -23,8 +23,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    //Logger.getLogger("org").setLevel(Level.ERROR)
-    //Logger.getLogger("akka").setLevel(Level.ERROR)
+    Logger.getLogger("org").setLevel(Level.ERROR)
+    Logger.getLogger("akka").setLevel(Level.ERROR)
 
     val startTime = Calendar.getInstance()
 
@@ -50,6 +50,8 @@ object Main {
             nextOption(map ++ Map("sep" -> value), tail)
           case "-partitions" :: value :: tail =>
             nextOption(map ++ Map("partitions" -> value), tail)
+          case "-step" :: value :: tail =>
+            nextOption(map ++ Map("bcstep" -> value), tail)
           case option :: tail => println("Unknown option " + option)
             nextOption(map ++ Map("unknown" -> ""), tail)
         }
@@ -67,6 +69,11 @@ object Main {
         System.exit(1)
         null
     }
+    val log = LogManager.getRootLogger
+    log.setLevel(Level.INFO)
+    val layout = new SimpleLayout()
+    /*val appender = new FileAppender(layout, logFilePath, false)
+    log.addAppender(appender)*/
 
     val separator =
       if (options.contains("sep")) options("sep")
@@ -77,13 +84,13 @@ object Main {
         options("mode")
       else ""
 
-
-
-    val log = LogManager.getRootLogger
-    log.setLevel(Level.INFO)
-    val layout = new SimpleLayout()
-    val appender = new FileAppender(layout, logFilePath, false)
-    log.addAppender(appender)
+    def isAllDigits(x: String) = x forall Character.isDigit
+    val bcstep : Int =
+      if (options.contains("bcstep") &&  isAllDigits(options("bcstep") ))
+        options("bcstep").toInt
+    else 8
+    if (mode == "TD" )
+      log.info("SPARKER - Broadcast Step " + bcstep)
 
     val sc = new SparkContext(conf)
 
@@ -138,9 +145,11 @@ object Main {
     if (options.contains("partitions"))
       profiles = profiles.repartition(options("partitions").toInt)
 
+
     profiles.cache()
     val pTime = Calendar.getInstance()
     log.info("SPARKER - Loaded profiles " + profiles.count())
+    log.info("SPARKER - Profiles Partitions " + profiles.getNumPartitions)
     log.info("SPARKER - Time to load profiles " + (pTime.getTimeInMillis - startTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
     // Reading Ground-Truth dataset
@@ -198,7 +207,7 @@ object Main {
     val gtTime = Calendar.getInstance()
     log.info("SPARKER - Time to load groundtruth " + (gtTime.getTimeInMillis - pTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
-    EntityResolution.resolution(log, separators, profiles, startTime, maxProfileID, gt, newGTSize, maxIdDataset1, mode)
+    EntityResolution.resolution(log, separators, profiles, startTime, maxProfileID, gt, newGTSize, maxIdDataset1, mode, bcstep)
 
     sc.stop()
   }
