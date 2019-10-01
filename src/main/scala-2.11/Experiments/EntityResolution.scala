@@ -209,6 +209,7 @@ object EntityResolution {
                 profileAndPartitionIDs._1.map(partitionID => (partitionID, profileMap))
             }
             .reduceByKey(_++_)
+            .cache()
 
 
           val profilesPairsRDD = candidatePairs
@@ -310,7 +311,6 @@ object EntityResolution {
             .reduceByKey(_++_)
             .cache()
 
-
           val profilesPairsRDD = candidatePairs
             .map {
               cp =>
@@ -325,7 +325,6 @@ object EntityResolution {
                 WritableUtils.writeVLong(new DataOutputStream(baos), p._1)
                 (baos.toByteArray, p._2)
             }
-            .cache
 
           var matches : RDD[WeightedEdge] = sc.emptyRDD
 
@@ -387,6 +386,94 @@ object EntityResolution {
 
 
         case "TD3" =>
+
+          /** Broadcasting comparisons */
+          // k is the number of partitions and l is the size of the Triangle
+          val k = profiles.getNumPartitions
+          val l = ((-1 + math.sqrt(1 + 8 * k))/2).asInstanceOf[Int]
+
+          // calculate the ID of the partition
+          // p and q are the coordinates of the position in the triangle
+          def getPartitionID(p:Int, q:Int) : Int = {
+            val id = (2 * l - p + 2) * (p - 1)/2 + (q - p + 1)
+            id.asInstanceOf[Int]
+          }
+
+          // distribute the profiles in the triangle
+          // for each profile get a random anchor (between [1, l]) and send it to
+          // all the executor with p = anchor and q = anchor
+          val distributedProfilesRDD = profiles
+            .map {
+              p =>
+                var partitionIDs : Set[Int] = Set[Int]()
+                val rand = scala.util.Random
+                rand.setSeed(p.id)
+                val anchor = rand.nextInt(l) + 1
+                for (p <- 1 to anchor) partitionIDs += getPartitionID(p, anchor)
+                for (q <- anchor to l) partitionIDs += getPartitionID(anchor, q)
+                (partitionIDs, p, anchor)
+            }
+            .flatMap {
+              profileAndPartitionIDs =>
+                val profileMap = Map(profileAndPartitionIDs._2.asInstanceOf[Profile].id -> (profileAndPartitionIDs._2, profileAndPartitionIDs._3))
+                profileAndPartitionIDs._1.map(partitionID => (partitionID, profileMap))
+            }
+            .reduceByKey(_++_)
+            .cache
+
+
+          val profilesPairsRDD = candidatePairs
+            .map {
+              cp =>
+                val baos1 = new ByteArrayOutputStream()
+                WritableUtils.writeVLong(new DataOutputStream(baos1), cp.firstProfileID)
+                val baos2 = new ByteArrayOutputStream()
+                WritableUtils.writeVLong(new DataOutputStream(baos2), cp.secondProfileID)
+                (baos1.toByteArray, baos2.toByteArray)
+            }
+
+          val comparisons = sc.broadcast(profilesPairsRDD.collect())
+
+          distributedProfilesRDD
+            .flatMap {
+              partitionProfiles =>
+                val partitionID = partitionProfiles._1
+                val profilesMap = partitionProfiles._2
+                val comp = comparisons.value
+                comp.map {
+                  pair =>
+                    val baos1 = new ByteArrayInputStream( pair._1)
+                    val profileID1 = WritableUtils.readVLong(new DataInputStream(baos1))
+
+                    val baos2 = new ByteArrayInputStream( pair._2)
+                    val profileID2 = WritableUtils.readVLong(new DataInputStream(baos2))
+
+                    if (profilesMap.contains(profileID1) && profilesMap.contains(profileID2)) {
+                      val profile1 = profilesMap(profileID1)._1
+                      val anchor1 = profilesMap(profileID1)._2
+
+                      val profile2 = profilesMap(profileID2)._1
+                      val anchor2 = profilesMap(profileID2)._2
+
+                      if (anchor1 == anchor2) {
+                        if (anchor1 == partitionID)
+                          compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
+                        else WeightedEdge(-1, -1, -1)
+                      }
+                      else
+                        compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
+                    }
+                    else WeightedEdge(-1, -1, -1)
+                }
+            }
+            .filter(_.weight >= 0.5)
+
+
+
+
+
+        case "TD4" =>
+
           /** Broadcasting array of comparisons */
 
           // k is the number of partitions and l is the size of the Triangle
@@ -437,7 +524,6 @@ object EntityResolution {
                 WritableUtils.writeVLong(new DataOutputStream(baos), p._1)
                 (baos.toByteArray, p._2)
             }
-            .cache
 
 
           val comparisons = sc.broadcast(profilesPairsRDD.collect())
@@ -481,47 +567,23 @@ object EntityResolution {
             }
             .filter(_.weight >= 0.5)
 
+        case "TEST" =>
+          val test1 = candidatePairs.map(p => (p.firstProfileID, p.secondProfileID)).cache()
+          test1.count()
+          test1.unpersist()
 
-
-
-
-        case "TD4" =>
-          /** Broadcasting comparisons */
-          // k is the number of partitions and l is the size of the Triangle
-          val k = profiles.getNumPartitions
-          val l = ((-1 + math.sqrt(1 + 8 * k))/2).asInstanceOf[Int]
-
-          // calculate the ID of the partition
-          // p and q are the coordinates of the position in the triangle
-          def getPartitionID(p:Int, q:Int) : Int = {
-            val id = (2 * l - p + 2) * (p - 1)/2 + (q - p + 1)
-            id.asInstanceOf[Int]
-          }
-
-          // distribute the profiles in the triangle
-          // for each profile get a random anchor (between [1, l]) and send it to
-          // all the executor with p = anchor and q = anchor
-          val distributedProfilesRDD = profiles
+          val test2 = candidatePairs
             .map {
-              p =>
-                var partitionIDs : Set[Int] = Set[Int]()
-                val rand = scala.util.Random
-                rand.setSeed(p.id)
-                val anchor = rand.nextInt(l) + 1
-                for (p <- 1 to anchor) partitionIDs += getPartitionID(p, anchor)
-                for (q <- anchor to l) partitionIDs += getPartitionID(anchor, q)
-                (partitionIDs, p, anchor)
-            }
-            .flatMap {
-              profileAndPartitionIDs =>
-                val profileMap = Map(profileAndPartitionIDs._2.asInstanceOf[Profile].id -> (profileAndPartitionIDs._2, profileAndPartitionIDs._3))
-                profileAndPartitionIDs._1.map(partitionID => (partitionID, profileMap))
+              cp =>
+                (cp.firstProfileID, Array(cp.secondProfileID))
             }
             .reduceByKey(_++_)
-            .cache
+            .cache()
+          test2.count()
+          test2.unpersist()
 
 
-          val profilesPairsRDD = candidatePairs
+          val test3 = candidatePairs
             .map {
               cp =>
                 val baos1 = new ByteArrayOutputStream()
@@ -531,42 +593,32 @@ object EntityResolution {
                 (baos1.toByteArray, baos2.toByteArray)
             }
             .cache()
+          test3.count()
+          test3.unpersist()
 
-          val comparisons = sc.broadcast(profilesPairsRDD.collect())
 
-          distributedProfilesRDD
-            .flatMap {
-              partitionProfiles =>
-                val partitionID = partitionProfiles._1
-                val profilesMap = partitionProfiles._2
-                val comp = comparisons.value
-                comp.map {
-                  pair =>
-                    val baos1 = new ByteArrayInputStream( pair._1)
-                    val profileID1 = WritableUtils.readVLong(new DataInputStream(baos1))
-
-                    val baos2 = new ByteArrayInputStream( pair._2)
-                    val profileID2 = WritableUtils.readVLong(new DataInputStream(baos2))
-
-                    if (profilesMap.contains(profileID1) && profilesMap.contains(profileID2)) {
-                      val profile1 = profilesMap(profileID1)._1
-                      val anchor1 = profilesMap(profileID1)._2
-
-                      val profile2 = profilesMap(profileID2)._1
-                      val anchor2 = profilesMap(profileID2)._2
-
-                      if (anchor1 == anchor2) {
-                        if (anchor1 == partitionID)
-                          compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
-                        else WeightedEdge(-1, -1, -1)
-                      }
-                      else
-                        compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
-                    }
-                    else WeightedEdge(-1, -1, -1)
-                }
+          val test4 = candidatePairs
+            .map {
+              cp =>
+                val baos = new ByteArrayOutputStream()
+                WritableUtils.writeVLong(new DataOutputStream(baos), cp.secondProfileID)
+                (cp.firstProfileID, Array(baos.toByteArray))
             }
-            .filter(_.weight >= 0.5)
+            .reduceByKey(_++_)
+            .map {
+              p =>
+                val baos = new ByteArrayOutputStream()
+                WritableUtils.writeVLong(new DataOutputStream(baos), p._1)
+                (baos.toByteArray, p._2)
+            }
+            .cache()
+          test4.count()
+          test4.unpersist()
+
+          null
+
+
+
 
         case _ =>
           //Entity matching: just a preliminary test
