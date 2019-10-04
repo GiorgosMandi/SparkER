@@ -23,8 +23,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    Logger.getLogger("org").setLevel(Level.ERROR)
-    Logger.getLogger("akka").setLevel(Level.ERROR)
+    //Logger.getLogger("org").setLevel(Level.ERROR)
+    //Logger.getLogger("akka").setLevel(Level.ERROR)
 
     val startTime = Calendar.getInstance()
 
@@ -89,7 +89,7 @@ object Main {
       if (options.contains("bcstep") &&  isAllDigits(options("bcstep") ))
         options("bcstep").toInt
     else 8
-    if (mode == "TD" )
+    if (mode == "TD2" )
       log.info("SPARKER - Broadcast Step " + bcstep)
 
     val sc = new SparkContext(conf)
@@ -146,7 +146,7 @@ object Main {
       profiles = profiles.repartition(options("partitions").toInt)
 
 
-    profiles.cache()
+    profiles.setName("Profiles").cache()
     val pTime = Calendar.getInstance()
     log.info("SPARKER - Loaded profiles " + profiles.count())
     log.info("SPARKER - Profiles Partitions " + profiles.getNumPartitions)
