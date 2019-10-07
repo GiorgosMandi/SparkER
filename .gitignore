@@ -6,3 +6,8 @@ build/*
 *.ipr
 *.iws
 .idea
+*.class
+
+*.cache
+
+*.properties
