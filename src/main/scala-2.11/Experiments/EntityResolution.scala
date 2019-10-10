@@ -22,6 +22,7 @@ import org.apache.hadoop.io.VLongWritable
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable
+import scala.util.Try
 object EntityResolution {
 
 
@@ -119,7 +120,7 @@ object EntityResolution {
 
     /** Entity Matching
       * Distribute Profiles using the Triangle Distribution method
-      * Broadcasting Array of Comparisons in Parts
+      * Broadcast the Array of Comparisons in Parts
       * */
 
     // k is the number of partitions and l is the size of the Triangle
@@ -133,6 +134,7 @@ object EntityResolution {
       id.asInstanceOf[Int]
     }
 
+
     // distribute the profiles in the triangle
     // for each profile get a random anchor (between [1, l]) and send it to
     // all the executor with p = anchor and q = anchor
@@ -145,18 +147,27 @@ object EntityResolution {
           val anchor = rand.nextInt(l) + 1
           for (p <- 1 to anchor) partitionIDs += getPartitionID(p, anchor)
           for (q <- anchor to l) partitionIDs += getPartitionID(anchor, q)
-          (partitionIDs, p, anchor)
+          (partitionIDs, Array((p, anchor)))
       }
-      .flatMap {
-        profileAndPartitionIDs =>
-          val profileMap = Map(profileAndPartitionIDs._2.asInstanceOf[Profile].id.toInt -> (profileAndPartitionIDs._2, profileAndPartitionIDs._3))
-          profileAndPartitionIDs._1.map(partitionID => (partitionID, profileMap))
-      }
+      .flatMap(p => p._1.map(id => (id, p._2)))
       .reduceByKey(_++_)
+      .map {
+        profileAndPartition =>
+          val partitionID = profileAndPartition._1
+          val profiles = profileAndPartition._2
+          val profileAr = profiles.map(p =>  Array((p._1, p._2))).reduce(_++_)
+          (partitionID, profileAr)
+      }
       .setName("DistributedProfiles")
       .persist(StorageLevel.MEMORY_AND_DISK)
 
-    val profilesPairsRDD = candidatePairs
+
+
+
+    // Transform the candidatePairs into an RDD in which each partition contain arrays of comparisons.
+    // In these arrays the first element is the ProfileID that must be compared with all the other
+    // IDs in the array.
+    val ComparisonsPerPartitionRDD = candidatePairs
       .mapPartitions { p =>
         var comparisonMap: Map[Int, Array[Int]] = Map()
         p.foreach {
@@ -172,77 +183,80 @@ object EntityResolution {
               comparisonMap += (id1 -> comp)
             }
         }
-        comparisonMap.keySet.map(key => (key +: comparisonMap(key))).toIterator
+        comparisonMap.keySet.map(key => key +: comparisonMap(key)).toIterator
       }
       .setName("ComparisonsPerPartition")
-      .cache()
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
-
+    // In a for loop, collect and broadcast some of the partitions of the RDD and perform the comparisons.
     var matches : RDD[WeightedEdge] = sc.emptyRDD
     var matchesCount : Long = 0
 
-    val profilesPairsSize = profilesPairsRDD.getNumPartitions
+    val ComparisonsPerPartitionSize = ComparisonsPerPartitionRDD.getNumPartitions
     val step = bcstep
-    for (i <- 1 to profilesPairsSize/step + 1) {
+    for (i <- 1 to ComparisonsPerPartitionSize/step + 1) {
       val start = (i - 1) * step
-      val end = if (start + step > profilesPairsSize) profilesPairsSize else start + step -1
+      val end = if (start + step > ComparisonsPerPartitionSize) ComparisonsPerPartitionSize else start + step -1
       val partitions = start to end
-      val profilesPairsPart = profilesPairsRDD
+      val ComparisonsPerPartitionPart = ComparisonsPerPartitionRDD
         .mapPartitionsWithIndex((index, it) => if (partitions.contains(index)) it else Iterator(), true)
         .collect()
 
-      val comparisonsIterator = sc.broadcast(profilesPairsPart)
+      val comparisonsIterator = sc.broadcast(ComparisonsPerPartitionPart)
 
       val wEdges =
         distributedProfilesRDD
           .flatMap {
             partitionProfiles =>
               val partitionID = partitionProfiles._1
-              val profilesMap = partitionProfiles._2
-              val comp = comparisonsIterator.value
-              comp.flatMap {
-                profilesComparisonsSeq =>
-                  val profileID = profilesComparisonsSeq.head
-                  if (profilesMap.contains(profileID)) {
-                    val profile1 = profilesMap(profileID)._1
-                    val anchor1 = profilesMap(profileID)._2
-                    profilesComparisonsSeq
-                      .filter(_ != profileID)
-                      .filter(profilesMap.contains)
+              val profilesArray = partitionProfiles._2
+              val comparisonsArray = comparisonsIterator.value
+              val edges = comparisonsArray
+                .filter(ar => profilesArray.map(_._1.id.toInt).contains(ar.head))
+                .flatMap {
+                  comparisons =>
+                    val profileID = comparisons.head
+                    val profileNode = profilesArray.find(p => p._1.id.toInt == profileID).head
+                    val profile1 = profileNode._1
+                    val anchor1 = profileNode._2
+                    comparisons
+                      .tail
+                      .filter(profilesArray.map(_._1.id.toInt).contains)
+                      .filter {
+                        id =>
+                          var pass = true
+                          val anchor2 = profilesArray.find(p => p._1.id.toInt == id).head._2
+                          if (anchor1 == anchor2 && anchor1 != partitionID) pass = false
+                          pass
+                      }
                       .map {
                         id =>
-                          val profile2 = profilesMap(id)._1
-                          val anchor2 = profilesMap(id)._2
-                          if (anchor1 == anchor2) {
-                            if (anchor1 == partitionID)
-                              compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
-                            else WeightedEdge(-1, -1, -1)
-                          }
-                          else
-                            compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
+                          val profile2 = profilesArray.find(p => p._1.id.toInt == id).head._1
+                          compare(profile1, profile2, MatchingFunctions.jaccardSimilarity)
                       }
-                  }
-                  else List(WeightedEdge(-1, -1, -1))
-              }
+                }
+              comparisonsIterator.unpersist()
+              edges
           }
           .filter(_.weight >= 0.5)
 
       matches = matches union wEdges
+      if ( i == ComparisonsPerPartitionSize/step + 1)
+        matches.setName("Matches").persist(StorageLevel.MEMORY_AND_DISK)  //if it's the final execution cache it
+
+      // if the count occur outside of the for loop, then the Executors will collect all the parts of the
+      // ComparisonsPerPartitionRDD and they will probably run out of memory
       matchesCount += wEdges.count()
-      comparisonsIterator.unpersist()
     }
 
-    matches.setName("Matches").cache()
     log.info("SPARKER - Number of mathces " + matchesCount)
     val endMatchTime = Calendar.getInstance()
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-
-
-
     // unpersisting all the persisted RDDs
     val rdds = sc.getPersistentRDDs
-    rdds.keySet.foreach (key => rdds(key).unpersist())
+    rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
+
 
     //Clustering
     val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,

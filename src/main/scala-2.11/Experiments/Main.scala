@@ -2,11 +2,9 @@ package Experiments
 
 import java.util.Calendar
 
-
 import SparkER.Wrappers.{CSVWrapper, JSONWrapper, SerializedObjectLoader}
 import org.apache.log4j.{FileAppender, Level, LogManager, SimpleLayout}
-import org.apache.spark.{SparkConf, SparkContext}
-
+import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 
@@ -23,8 +21,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    //Logger.getLogger("org").setLevel(Level.ERROR)
-    //Logger.getLogger("akka").setLevel(Level.ERROR)
+   //Logger.getLogger("org").setLevel(Level.ERROR)
+   //Logger.getLogger("akka").setLevel(Level.ERROR)
 
     val startTime = Calendar.getInstance()
 
@@ -143,7 +141,7 @@ object Main {
     val separators = Array(maxIdDataset1)
     var profiles = dataset1.union(dataset2)
     if (options.contains("partitions"))
-      profiles = profiles.repartition(options("partitions").toInt)
+      profiles = profiles.map(p=>(p.id, p)).partitionBy(new HashPartitioner(options("partitions").toInt)).map(_._2)
 
 
     profiles.setName("Profiles").cache()
