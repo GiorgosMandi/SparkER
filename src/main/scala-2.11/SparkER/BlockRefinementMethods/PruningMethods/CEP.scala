@@ -41,7 +41,7 @@ object CEP {
   : RDD[(Double, Double, Iterable[UnweightedEdge])] = {
 
     val edgesToKeep = math.floor(blockIndex.value.values.flatMap(_.map(_.size.toDouble)).sum / 2.0)
-    println("SPARKER - Number of edges to keep " + edgesToKeep)
+
     if (useEntropy && blocksEntropies == null) {
       throw new Exception("blocksEntropies must be defined")
     }
@@ -60,7 +60,6 @@ object CEP {
       edgesPerProfile = sc.broadcast(stats.map(x => (x._2._1, x._2._2.toDouble)).groupByKey().map(x => (x._1, x._2.sum)).collectAsMap())
     }
     val threshold = calcThreshold(profileBlocksFiltered, blockIndex, maxID, separatorIDs, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, numberOfEdges, edgesPerProfile, edgesToKeep)
-    println("SPARKER - Computed threshold " + threshold)
     val toKeep = sc.broadcast(threshold._2)
     val edges = pruning(profileBlocksFiltered, blockIndex, maxID, separatorIDs, groundtruth, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, threshold._1, toKeep, numberOfEdges, edgesPerProfile)
     toKeep.unpersist()
@@ -203,7 +202,6 @@ object CEP {
     }
     val threshold = frequencies(cont - 1)._1
     var lastToKeep = frequencies(cont - 1)._2 - (sum - edgesToKeep)
-    println("SPARKER - Di quelli con peso uguale a  " + threshold + " devo tenerne " + lastToKeep)
     /** Per ogni profilo conto quanti elementi ha dell'ultima soglia che devo tenere */
     val stats = partialFreqs.map { p =>
       (p._1, p._2.filter(_._1 == threshold).map(_._2))
