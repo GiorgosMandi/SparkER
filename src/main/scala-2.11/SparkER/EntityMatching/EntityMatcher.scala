@@ -1,11 +1,7 @@
 package SparkER.EntityMatching
 
-import java.util.Calendar
-
 import SparkER.DataStructures.{Profile, UnweightedEdge, WeightedEdge}
-import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -34,13 +30,18 @@ object EntityMatcher {
     * Distribute Profiles using the Triangle Distribution method
     * Broadcast the Array of Comparisons in Parts
     *
-    *  @param profiles RDD containing the profiles.
-    *  @param candidatePairs RDD containing UnweightedEdges
-    *  @param bcstep the number of partitions that will be broadcasted in each iteration
-    *  @return an RDD of WeightedEdges and its size
+    *  @param profiles            RDD containing the profiles.
+    *  @param candidatePairs      RDD containing UnweightedEdges
+    *  @param bcstep              the number of partitions that will be broadcasted in each iteration
+    *  @return                    an RDD of WeightedEdges and its size
     * */
   def entityMatching(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int)
   : (RDD[WeightedEdge], Long) = {
+
+
+    /*val slimProfiles = profiles.map(SlimProfile.apply)
+    slimProfiles.setName("SlimProfiles").cache()
+    slimProfiles.count()*/
 
       val sc = SparkContext.getOrCreate()
 
@@ -65,16 +66,15 @@ object EntityMatcher {
           p =>
             var partitionIDs : Set[Int] = Set[Int]()
             val rand = scala.util.Random
-            //rand.setSeed(p.id)
             val anchor = rand.nextInt(l) + 1
             val partitionIDs1 = (1 to anchor).map(p => getPartitionID(p, anchor))
             val partitionIDs2 = (anchor to l).map(q => getPartitionID(anchor, q))
             partitionIDs ++= partitionIDs1 ++ partitionIDs2
             (partitionIDs, (p, anchor))
         }
-        .flatMap(p => p._1.map(id => (id, Array((p._2._1.id.toInt, p._2)))))
+        .flatMap(p => p._1.map(id => (id, Array((p._2._1.id.toInt, p._2)))))  // append to array instead of Set
         .reduceByKey(_ ++ _)
-       // .map (p => (p._1, p._2, p._2.zipWithIndex.map(pt => (pt._1._1.id.toInt, pt._1)).toMap))
+        .map(p => (p._1, p._2.toSet))
         .setName("DistributedProfiles")
         .persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -110,6 +110,9 @@ object EntityMatcher {
         .setName("ComparisonsPerPartition")
         .persist(StorageLevel.MEMORY_AND_DISK)
 
+
+
+
       // In a for loop, collect and broadcast some of the partitions of the RDD and perform the comparisons.
       var matches : RDD[WeightedEdge] = sc.emptyRDD
       var matchesCount : Long = 0
@@ -132,23 +135,21 @@ object EntityMatcher {
             .flatMap {
               partitionProfiles =>
                 val partitionID = partitionProfiles._1
-                val profilesAr = partitionProfiles._2
-                //val profilePosMap = partitionProfiles._3
-                val profileSetIDs = profilesAr.map(_._1).toSet // WARNING: significant memory allocation
+                val profilesSet = partitionProfiles._2
+                val profilesID = profilesSet.map((_._1))
                 val comparisonsArray = BDcomparisonsIterator.value
                 val edges = comparisonsArray
-                  .filter(t => profileSetIDs.contains(t._1)) // WARNING: Performance cost
+                  .filter(t => profilesID.contains(t._1))
                   .flatMap {
                     comparisons =>
-                      val profileNode =  profilesAr.find(_._1 == comparisons._1).get._2 // WARNING: Performance cost - maybe i sould use maps
+                      val profileNode =  profilesSet.find(_._1 == comparisons._1).get._2
                       val profile1 = profileNode._1
                       val anchor1 = profileNode._2
-                      val intersection = profileSetIDs.intersect(comparisons._2.toSet) // WARNING: Performance cost
-                      val profiles = profilesAr.filter(t => intersection.contains(t._1))
+                      val intersection = profilesID.intersect(comparisons._2.toSet) // WARNING: Performance cost (?)
                       comparisons._2
                         .filter(intersection.contains)
-                        .map(id => profiles.find(_._1 == id).get._2)
-                        .filter( (anchor1 == _._2 && anchor1 != partitionID))
+                        .map( id =>  profilesSet.find(_._1 == id).get._2)
+                        .filter((anchor1 ==_._2 && anchor1 != partitionID))
                         .map {
                           pn =>
                             val profile2 = pn._1

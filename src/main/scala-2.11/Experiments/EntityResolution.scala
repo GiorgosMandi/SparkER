@@ -134,6 +134,16 @@ object EntityResolution {
         )
     }
 
+    /*
+    val candidatePairs = edgesAndCount.flatMap(_._3)
+    log.info("SPARKER ")
+    log.info("SPARKER ")
+    log.info("SPARKER ")
+    log.info("SPARKER - Profiles = " + profiles.count() + " Comparisons = " + candidatePairs.count())
+    log.info("SPARKER ")
+    log.info("SPARKER ")
+    log.info("SPARKER ")*/
+
 
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
@@ -154,8 +164,6 @@ object EntityResolution {
 
     log.info("SPARKER - Metablocking time " + (endMBTime.getTimeInMillis - fTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-
-
     val (matches , matchesCount) = EntityMatcher.entityMatching(profiles, candidatePairs, bcstep)
 
     val endMatchTime = Calendar.getInstance()
@@ -173,7 +181,7 @@ object EntityResolution {
     clusters.setName("Clusters").cache()
     val numClusters = clusters.count()
 
-    matches.unpersist()
+    matches.unpersist() // <-
 
 
     val endClusterTime = Calendar.getInstance()

@@ -21,8 +21,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-   //Logger.getLogger("org").setLevel(Level.ERROR)
-   //Logger.getLogger("akka").setLevel(Level.ERROR)
+   // Logger.getLogger("org").setLevel(Level.ERROR)
+   // Logger.getLogger("akka").setLevel(Level.ERROR)
 
     val startTime = Calendar.getInstance()
 
