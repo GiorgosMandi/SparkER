@@ -1,35 +1,28 @@
 package Experiments
 
-import java.io.{ByteArrayInputStream, DataInputStream, DataOutputStream}
 import java.util.Calendar
 
 import SparkER.BlockBuildingMethods.TokenBlocking
-import SparkER.BlockRefinementMethods.PruningMethods.{PruningUtils, WNP}
+import SparkER.BlockRefinementMethods.PruningMethods.{CEP, CNP, PruningUtils, WEP, WNP}
 import SparkER.BlockRefinementMethods.{BlockFiltering, BlockPurging}
 import SparkER.DataStructures.{Profile, WeightedEdge}
 import SparkER.EntityClustering.{CenterClustering, EntityClusterUtils}
 import SparkER.EntityMatching.EntityMatcher.compare
 import SparkER.EntityMatching.{EntityMatcher, MatchingFunctions}
 import SparkER.Utilities.Converters
-import org.apache.commons.io.output.ByteArrayOutputStream
 import org.apache.log4j.Logger
-import org.apache.spark.{HashPartitioner, SparkContext, TaskContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.hadoop.io.WritableUtils
-import org.apache.hadoop.io.file.tfile.Utils
-import org.apache.hadoop.io.VLongWritable
 import org.apache.spark.storage.StorageLevel
 
-import scala.collection.mutable
-import scala.util.Try
 object EntityResolution {
 
 
 
   def resolution(log:Logger, separators:Array[Long], profiles:RDD[Profile], startTime: Calendar, maxProfileID:Long,
-                 gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long, mode: String, bcstep: Int = 8,
-                 partitions: Int = 0): Unit ={
+                 gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long, mode: String, metablocking: String,
+                 bcstep: Int = 8, partitions: Int = 0): Unit ={
 
     val sc = SparkContext.getOrCreate()
 
@@ -71,7 +64,7 @@ object EntityResolution {
     val profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]] = sc.broadcast(profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap())
 
     val blocksEntropiesMap: Broadcast[scala.collection.Map[Long, Double]] = {
-      if (useEntropy) {blocksAfterFiltering
+      if (useEntropy) {
         val blocksEntropies = blocks.map(b => (b.blockID, b.entropy)).collectAsMap()
         sc.broadcast(blocksEntropies)
       }
@@ -82,24 +75,70 @@ object EntityResolution {
 
     blocks.unpersist()
 
-    val edgesAndCount = WNP.WNP(
-      profileBlocksFiltered,
-      blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
-      maxProfileID.toInt,
-      separators,
-      gt,
-      PruningUtils.ThresholdTypes.AVG,
-      PruningUtils.WeightTypes.CBS,
-      profileBlocksSizeIndex,
-      useEntropy,
-      blocksEntropiesMap,
-      2.0,
-      PruningUtils.ComparisonTypes.OR
-    )
+
+    val edgesAndCount = metablocking match {
+      case "CEP" =>
+        CEP.CEP(
+          profileBlocksFiltered,
+          blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
+          maxProfileID.toInt,
+          separators,
+          gt,
+          PruningUtils.WeightTypes.CBS,
+          profileBlocksSizeIndex,
+          useEntropy,
+          blocksEntropiesMap
+        )
+      case "WEP" =>
+        WEP.WEP(
+          profileBlocksFiltered,
+          blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
+          maxProfileID.toInt,
+          separators,
+          gt,
+          PruningUtils.WeightTypes.CBS,
+          profileBlocksSizeIndex,
+          useEntropy,
+          blocksEntropiesMap
+        )
+      case "CNP" =>
+        CNP.CNP(
+          blocks,
+          profiles.count(),
+          profileBlocksFiltered,
+          blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
+          maxProfileID.toInt,
+          separators,
+          gt,
+          PruningUtils.ThresholdTypes.AVG,
+          PruningUtils.WeightTypes.CBS,
+          profileBlocksSizeIndex,
+          useEntropy,
+          blocksEntropiesMap,
+          PruningUtils.ComparisonTypes.OR
+        )
+      case _ =>
+        WNP.WNP(
+          profileBlocksFiltered,
+          blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
+          maxProfileID.toInt,
+          separators,
+          gt,
+          PruningUtils.ThresholdTypes.AVG,
+          PruningUtils.WeightTypes.CBS,
+          profileBlocksSizeIndex,
+          useEntropy,
+          blocksEntropiesMap,
+          2.0,
+          PruningUtils.ComparisonTypes.OR
+        )
+    }
+
 
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
     val candidatePairs = edgesAndCount.flatMap(_._3)
+
 
     blocksAfterFiltering.unpersist()
     blockIndex.unpersist()

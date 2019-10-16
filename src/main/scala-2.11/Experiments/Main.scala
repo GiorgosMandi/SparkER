@@ -50,6 +50,8 @@ object Main {
             nextOption(map ++ Map("partitions" -> value), tail)
           case "-step" :: value :: tail =>
             nextOption(map ++ Map("bcstep" -> value), tail)
+          case "-metablocking" :: value :: tail =>
+            nextOption(map ++ Map("metablocking" -> value), tail)
           case option :: tail => println("Unknown option " + option)
             nextOption(map ++ Map("unknown" -> ""), tail)
         }
@@ -81,6 +83,13 @@ object Main {
       if (options.contains("mode"))
         options("mode")
       else ""
+
+    val metablocking =
+      if (options.contains("metablocking"))
+        options("metablocking")
+      else ""
+
+
 
     def isAllDigits(x: String) = x forall Character.isDigit
     val bcstep : Int =
@@ -205,7 +214,7 @@ object Main {
     val gtTime = Calendar.getInstance()
     log.info("SPARKER - Time to load groundtruth " + (gtTime.getTimeInMillis - pTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
-    EntityResolution.resolution(log, separators, profiles, startTime, maxProfileID, gt, newGTSize, maxIdDataset1, mode, bcstep)
+    EntityResolution.resolution(log, separators, profiles, startTime, maxProfileID, gt, newGTSize, maxIdDataset1,  mode, metablocking, bcstep)
 
     sc.stop()
   }
