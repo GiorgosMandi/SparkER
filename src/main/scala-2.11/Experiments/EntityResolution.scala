@@ -152,7 +152,8 @@ object EntityResolution {
 
     log.info("SPARKER - Metablocking time " + (endMBTime.getTimeInMillis - fTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    val (matches , matchesCount) = EntityMatcher.entityMatching(profiles, candidatePairs, bcstep)
+    val (matches , matchesCount) = EntityMatching.entityMatching(profiles, candidatePairs, bcstep,
+      EntityMatching.profileMatching, MatchingFunctions.jaccardSimilarity)
 
     val endMatchTime = Calendar.getInstance()
     log.info("SPARKER - Number of mathces " + matchesCount)
