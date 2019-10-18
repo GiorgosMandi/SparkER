@@ -5,16 +5,14 @@ import java.util.Calendar
 import SparkER.BlockBuildingMethods.TokenBlocking
 import SparkER.BlockRefinementMethods.PruningMethods.{CEP, CNP, PruningUtils, WEP, WNP}
 import SparkER.BlockRefinementMethods.{BlockFiltering, BlockPurging}
-import SparkER.DataStructures.{Profile, WeightedEdge}
+import SparkER.DataStructures.Profile
 import SparkER.EntityClustering.{CenterClustering, EntityClusterUtils}
-import SparkER.EntityMatching.EntityMatcher.compare
-import SparkER.EntityMatching.{EntityMatcher, MatchingFunctions}
+import SparkER.EntityMatching.{EntityMatching, MatchingFunctions}
 import SparkER.Utilities.Converters
 import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 object EntityResolution {
 
@@ -133,16 +131,6 @@ object EntityResolution {
           PruningUtils.ComparisonTypes.OR
         )
     }
-
-    /*
-    val candidatePairs = edgesAndCount.flatMap(_._3)
-    log.info("SPARKER ")
-    log.info("SPARKER ")
-    log.info("SPARKER ")
-    log.info("SPARKER - Profiles = " + profiles.count() + " Comparisons = " + candidatePairs.count())
-    log.info("SPARKER ")
-    log.info("SPARKER ")
-    log.info("SPARKER ")*/
 
 
     val numCandidates = edgesAndCount.map(_._1).sum()

@@ -5,7 +5,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-import scala.tools.nsc.interpreter.Completion.Candidates
+
 
 /**
   * Contains differents methods to estimate
