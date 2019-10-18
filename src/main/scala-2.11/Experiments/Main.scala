@@ -95,7 +95,7 @@ object Main {
     val bcstep : Int =
       if (options.contains("bcstep") &&  isAllDigits(options("bcstep") ))
         options("bcstep").toInt
-    else 8
+    else 0
     if (mode == "TD2" )
       log.info("SPARKER - Broadcast Step " + bcstep)
 
@@ -150,7 +150,7 @@ object Main {
     val separators = Array(maxIdDataset1)
     var profiles = dataset1.union(dataset2)
     if (options.contains("partitions"))
-      profiles = profiles.map(p=>(p.id, p)).partitionBy(new HashPartitioner(options("partitions").toInt)).map(_._2)
+      profiles = profiles.repartition(options("partitions").toInt)
 
 
     profiles.setName("Profiles").cache()
