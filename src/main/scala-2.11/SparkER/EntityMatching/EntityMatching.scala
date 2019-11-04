@@ -118,8 +118,8 @@ object EntityMatching {
     *  @return                    an RDD of WeightedEdges and its size
     * */
   def entityMatching(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
-               matchingMethod : (Profile, Profile, (Profile, Profile) => Double ) => WeightedEdge,
-               matchingFunctions: (Profile, Profile) => Double)
+                     matchingMethod : (Profile, Profile, (Profile, Profile) => Double ) => WeightedEdge,
+                     matchingFunctions: (Profile, Profile) => Double)
   : (RDD[WeightedEdge], Long) = {
 
     val sc = SparkContext.getOrCreate()
@@ -142,21 +142,22 @@ object EntityMatching {
     val partitionGroupIter = (0 until comparisonsRDD.getNumPartitions).grouped(step)
 
     while (partitionGroupIter.hasNext){
-        val partitionGroup = partitionGroupIter.next()
+      val partitionGroup = partitionGroupIter.next()
 
-        // collect and broadcast the comparisons
-        val comparisonsArray = sc.broadcast(
-          comparisonsRDD
-            .mapPartitionsWithIndex((index, it) => if (partitionGroup.contains(index)) it else Iterator(), preservesPartitioning = true)
-            .collect()
-        ).value
+      // collect and broadcast the comparisons
+      val comparisonsArrayBD = sc.broadcast(
+        comparisonsRDD
+          .mapPartitionsWithIndex((index, it) => if (partitionGroup.contains(index)) it else Iterator(), preservesPartitioning = true)
+          .collect()
+      )
 
       // perform comparisons
       val wEdges = profilesMap
         .mapPartitions {
           partitionProfiles =>
             val profilesM = partitionProfiles.next()
-            comparisonsArray
+            comparisonsArrayBD
+              .value
               .flatMap {
                 c =>
                   val profile1 = c._1
@@ -178,6 +179,7 @@ object EntityMatching {
 
       // if count occurs outside of the for loop, then the Executors will collect all the parts of the comparisonsRDD
       matchesCount += wEdges.count()
+      comparisonsArrayBD.unpersist()
     }
 
     (matches, matchesCount)
