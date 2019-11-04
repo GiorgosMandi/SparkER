@@ -1,6 +1,7 @@
 package SparkER.EntityClustering
 
 import SparkER.DataStructures.{Profile, WeightedEdge}
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.rdd.RDD
@@ -22,6 +23,30 @@ object EntityClusterUtils {
     * Computes the connected components
     **/
   def connectedComponents(weightedEdges: RDD[WeightedEdge]): RDD[Iterable[(Long, Long, Double)]] = {
+
+    val ccBD = SparkContext.getOrCreate().broadcast(
+        ConnectedComponents.run(weightedEdges, 100)
+        ._1
+        .map(x => {
+          val minNode = x._2
+          val otherNode = x._1
+          (minNode, List(otherNode))
+        })
+        .reduceByKey((a, b) => b ::: a)
+        .map(x => x._2.filter(x._1 != _).map(Set(x._1, _)).reduce(_++_))
+        .zipWithUniqueId()
+        .collect()
+    ).value
+
+    val wecc = weightedEdges
+      .map(
+        we => {
+          val id = ccBD.find(_._1.contains(we.firstProfileID)).get._2
+          (id, List(we))
+      })
+      .reduceByKey(_++_)
+      .collect()
+
     val edgesG = weightedEdges.map(e =>
       Edge(e.firstProfileID, e.secondProfileID, e.weight)
     )
