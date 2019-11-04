@@ -58,7 +58,9 @@ object EntityResolution {
 
     //Metablocking
     val blockIndexMap = blocksAfterFiltering.map(b => (b.blockID, b.profiles)).collectAsMap()
-    val blockIndex = sc.broadcast(blockIndexMap)  // this is 2GB on its own
+
+    val blockIndex = sc.broadcast(blockIndexMap) // < ----- WARNING
+
     val profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]] = sc.broadcast(profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap())
 
     val blocksEntropiesMap: Broadcast[scala.collection.Map[Long, Double]] = {
