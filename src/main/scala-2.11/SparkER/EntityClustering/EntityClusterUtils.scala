@@ -24,29 +24,31 @@ object EntityClusterUtils {
     **/
   def connectedComponents(weightedEdges: RDD[WeightedEdge]): RDD[Iterable[(Long, Long, Double)]] = {
 
-    val ccBD = SparkContext.getOrCreate().broadcast(
-        ConnectedComponents.run(weightedEdges, 100)
-        ._1
-        .map(x => {
-          val minNode = x._2
-          val otherNode = x._1
-          (minNode, List(otherNode))
-        })
-        .reduceByKey((a, b) => b ::: a)
-        .map(x => x._2.filter(x._1 != _).map(Set(x._1, _)).reduce(_++_))
-        .zipWithUniqueId()
-        .collect()
-    ).value
+    val ccNodes = SparkContext
+      .getOrCreate()
+      .broadcast(
+        ConnectedComponents
+          .run(weightedEdges, 100)
+          ._1
+          .map(x => {
+            val minNode = x._2
+            val otherNode = x._1
+            (minNode, List(otherNode))
+          })
+          .reduceByKey((a, b) => b ::: a)
+          .map(x => x._2.filter(x._1 != _).map(Set(x._1, _)).reduce(_++_))
+          .zipWithUniqueId()
+          .collect()
+      )
+      .value
+      .map(x => x._1.map(node => Map(node -> x._2)).reduce(_++_))
+      .reduce(_++_)
 
-    val wecc = weightedEdges
-      .map(
-        we => {
-          val id = ccBD.find(_._1.contains(we.firstProfileID)).get._2
-          (id, List(we))
-      })
+    val connectedComponents = weightedEdges
+      .map(we => (ccNodes(we.firstProfileID), Array(we)))
       .reduceByKey(_++_)
-      .collect()
-
+      .map(x => x._2.map(we => (we.firstProfileID, we.secondProfileID, we.weight)).toIterable)
+/*
     val edgesG = weightedEdges.map(e =>
       Edge(e.firstProfileID, e.secondProfileID, e.weight)
     )
@@ -57,7 +59,7 @@ object EntityClusterUtils {
         (edge.toTuple._1._1.asInstanceOf[Long], edge.toTuple._2._1.asInstanceOf[Long], edge.toTuple._3.asInstanceOf[Double])
       }
     }
-
+*/
     connectedComponents
   }
 
