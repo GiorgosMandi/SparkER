@@ -1,7 +1,7 @@
 name := "spark_er"
 version := "1.0"
 scalaVersion := "2.11.12"
-val sparkVersion = "2.0.1"
+val sparkVersion = "2.4.1"
 
 unmanagedBase := baseDirectory.value / "custom_lib"
 
