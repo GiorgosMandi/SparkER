@@ -12,7 +12,7 @@ object EntityMatching {
 
 
   /**
-    * Aggregate the comparisons of each Profile.
+    * Aggregate the comparisons of each Profile. The produced RDD will look like RDD[(Profile, Array(ProfileID)]
     *
     * @param candidatePairs   RDD containing the IDs of the profiles that must be compared
     * @param profiles         RDD of the Profiles
@@ -45,6 +45,7 @@ object EntityMatching {
 
   /**
     * For each partition return a Map with all the Profiles of the partition
+    * The produced RDD will look like RDD[Map(ID -> Profile)]
     *
     * @param profiles   RDD containing the Profiles
     * @return           RDD in which each partition contains Map(ID -> Profile)
@@ -132,7 +133,6 @@ object EntityMatching {
       .setName("profilesMap")
       .cache()
 
-
     // In a loop collect and broadcast partitions of the RDD and perform the comparisons.
     var matches : RDD[WeightedEdge] = sc.emptyRDD
     var matchesCount : Long = 0
@@ -150,7 +150,6 @@ object EntityMatching {
           .mapPartitionsWithIndex((index, it) => if (partitionGroup.contains(index)) it else Iterator(), preservesPartitioning = true)
           .collect()
       )
-
       // perform comparisons
       val wEdges = profilesMap
         .mapPartitions {
@@ -183,7 +182,37 @@ object EntityMatching {
     }
 
     (matches, matchesCount)
-
   }
+
+  def entityMatchingAlt(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
+                     matchingMethod : (Profile, Profile, (Profile, Profile) => Double ) => WeightedEdge,
+                     matchingFunctions: (Profile, Profile) => Double)
+  : (RDD[WeightedEdge], Long) = {
+
+    val comparisonsRDD = getComparisons(candidatePairs, profiles)
+      .flatMap(x => x._2.map(id => (id, Array(x._1)))) // Warning: Shuffle-Write is too much!!
+      .reduceByKey(_++_)
+      .setName("ComparisonsPerPartition")
+      .persist(StorageLevel.MEMORY_AND_DISK)
+
+    val profilesID = profiles.map(p => (p.id.toInt, p))
+
+    val profilesComparisons = profilesID.leftOuterJoin(comparisonsRDD)
+    val matches = profilesComparisons
+      .filter(comparisons => !comparisons._2._2.getOrElse(Array()).isEmpty)
+      .flatMap {
+        comparisons =>
+          val profile1 = comparisons._2._1
+          val profilesArray = comparisons._2._2.get
+          profilesArray
+            .map(profile2 => matchingMethod(profile1, profile2, matchingFunctions))
+            .filter(_.weight >= 0.5)
+      }
+      .setName("Matches")
+      .persist(StorageLevel.MEMORY_AND_DISK)
+
+    (matches, matches.count())
+
+    }
 
 }
