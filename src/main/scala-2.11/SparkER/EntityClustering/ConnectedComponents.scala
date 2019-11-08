@@ -14,14 +14,14 @@ object ConnectedComponents extends Serializable {
     * @param nodePairs on which to apply Small Star operations
     * @return new nodePairs after the operation and conncectivy change count
     */
-  private def smallStar(edges: RDD[(Long, Long)]): (RDD[(Long, Long)], Int) = {
+  private def smallStar(nodePairs: RDD[(Long, Long)]): (RDD[(Long, Long)], Int) = {
 
     /**
       * generate RDD of (self, List(neighbors)) where self > neighbors
       * E.g.: nodePairs (1, 4), (6, 1), (3, 2), (6, 5)
       * will result into (4, List(1)), (6, List(1)), (3, List(2)), (6, List(5))
       */
-    val neighbors = edges.map(x => {
+    val neighbors = nodePairs.map(x => {
       val (self, neighbor) = (x._1, x._2)
       if (self > neighbor)
         (self, neighbor)
@@ -87,7 +87,7 @@ object ConnectedComponents extends Serializable {
     * @param nodePairs on which to apply Large Star operations
     * @return new nodePairs after the operation and conncectivy change count
     */
-  private def largeStar(edges:RDD[(Long, Long)]): (RDD[(Long, Long)], Int) = {
+  private def largeStar(nodePairs:RDD[(Long, Long)]): (RDD[(Long, Long)], Int) = {
 
     /**
       * generate RDD of (self, List(neighbors))
@@ -95,7 +95,7 @@ object ConnectedComponents extends Serializable {
       * will result into (4, List(1)), (1, List(4)), (6, List(1)), (1, List(6)), (3, List(2)), (2, List(3)), (6, List(5)), (5, List(6))
       */
 
-    val neighbors = edges.flatMap(x => {
+    val neighbors = nodePairs.flatMap(x => {
       val (self, neighbor) = (x._1, x._2)
       if (self == neighbor)
         List((self, neighbor))
@@ -204,19 +204,19 @@ object ConnectedComponents extends Serializable {
     */
 
   @tailrec
-  private def alternatingAlgo(edges: RDD[(Long, Long)],
+  private def alternatingAlgo(nodePairs: RDD[(Long, Long)],
                               largeStarConnectivityChangeCount: Int, smallStarConnectivityChangeCount: Int, didConverge: Boolean,
                               currIterationCount: Int, maxIterationCount: Int): (RDD[(Long, Long)], Boolean, Int) = {
 
     val iterationCount = currIterationCount + 1
     if (didConverge)
-      (edges, true, currIterationCount)
+      (nodePairs, true, currIterationCount)
     else if (currIterationCount >= maxIterationCount) {
-      (edges, false, currIterationCount)
+      (nodePairs, false, currIterationCount)
     }
     else {
 
-      val (nodePairsLargeStar, currLargeStarConnectivityChangeCount) = largeStar(edges)
+      val (nodePairsLargeStar, currLargeStarConnectivityChangeCount) = largeStar(nodePairs)
 
       val (nodePairsSmallStar, currSmallStarConnectivityChangeCount) = smallStar(nodePairsLargeStar)
 
@@ -235,7 +235,7 @@ object ConnectedComponents extends Serializable {
 
   /**
     * Driver function
-    * @param cliques list of nodes representing subgraphs (or cliques)
+    * @param edges list of nodes representing subgraphs (or cliques)
     * @param maxIterationCount maximum number iterations to try before giving up
     * @return Connected Components as nodePairs where second member of the nodePair is the minimum node in the component
     */
