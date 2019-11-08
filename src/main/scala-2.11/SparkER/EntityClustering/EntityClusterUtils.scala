@@ -21,33 +21,46 @@ object EntityClusterUtils {
 
   /**
     * Computes the connected components
+    * First try to find the component using the Large/Small star algorithm, and if the
+    * algorithm converge, find the edges of the component.
+    *
+    * If the algorithm doesn't converge, calculate the components using the GraphX library.
     **/
   def connectedComponents(weightedEdges: RDD[WeightedEdge]): RDD[Iterable[(Long, Long, Double)]] = {
 
-    val ccNodes = SparkContext
-      .getOrCreate()
-      .broadcast(
-        ConnectedComponents
-          .run(weightedEdges, 100)
-          ._1
-          .map(x => {
-            val minNode = x._2
-            val otherNode = x._1
-            (minNode, List(otherNode))
-          })
-          .reduceByKey((a, b) => b ::: a)
-          .map(x => x._2.filter(x._1 != _).map(Set(x._1, _)).reduce(_++_))
-          .zipWithUniqueId()
-          .collect()
-      )
-      .value
-      .map(x => x._1.map(node => Map(node -> x._2)).reduce(_++_))
-      .reduce(_++_)
+    val ccNodes = ConnectedComponents.run(weightedEdges, 200)
 
-    val connectedComponents = weightedEdges
-      .map(we => (ccNodes(we.firstProfileID), Array(we)))
-      .reduceByKey(_++_)
-      .map(x => x._2.map(we => (we.firstProfileID, we.secondProfileID, we.weight)).toIterable)
+      if (ccNodes._2){
+        val ccNodesBD = SparkContext.getOrCreate().broadcast(
+            ConnectedComponents
+              .run(weightedEdges, 100)._1
+              .map(x => (x._2, Array( x._1)))
+              .reduceByKey((a, b) => b ++ a)
+              .map(x => x._2.filter(x._1 != _).map(Set(x._1, _)).reduce(_++_))
+              .zipWithUniqueId()
+              .collect()
+          )
+          .value
+          .map(x => x._1.map(node => Map(node -> x._2)).reduce(_++_))
+          .reduce(_++_)
+
+        weightedEdges
+          .map(we => (ccNodesBD(we.firstProfileID), Array(we)))
+          .reduceByKey(_++_)
+          .map(x => x._2.map(we => (we.firstProfileID, we.secondProfileID, we.weight)).toIterable)
+      }
+      else {
+        val edgesG = weightedEdges.map(e =>
+          Edge(e.firstProfileID, e.secondProfileID, e.weight)
+        )
+        val graph = Graph.fromEdges(edgesG, -1)
+        val cc = graph.connectedComponents()
+        cc.triplets.map(t => (t.dstAttr, t)).groupByKey().map { case (_, data) =>
+          data.map { edge =>
+            (edge.toTuple._1._1.asInstanceOf[Long], edge.toTuple._2._1.asInstanceOf[Long], edge.toTuple._3.asInstanceOf[Double])
+          }
+        }
+      }
 /*
     val edgesG = weightedEdges.map(e =>
       Edge(e.firstProfileID, e.secondProfileID, e.weight)
@@ -59,8 +72,8 @@ object EntityClusterUtils {
         (edge.toTuple._1._1.asInstanceOf[Long], edge.toTuple._2._1.asInstanceOf[Long], edge.toTuple._3.asInstanceOf[Double])
       }
     }
-*/
     connectedComponents
+*/
   }
 
 
