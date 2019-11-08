@@ -21,8 +21,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    // Logger.getLogger("org").setLevel(Level.ERROR)
-    // Logger.getLogger("akka").setLevel(Level.ERROR)
+    //Logger.getLogger("org").setLevel(Level.ERROR)
+    //Logger.getLogger("akka").setLevel(Level.ERROR)
 
     val startTime = Calendar.getInstance()
 
@@ -135,7 +135,7 @@ object Main {
       }
     val datasetExtension2 = dataset2Path.toString.split("\\.").last
     val dataset2 = datasetExtension2 match {
-      case "csv" => CSVWrapper.loadProfiles2(dataset2Path, realIDField = "id", separator= "#", sourceId = 2, header = true, startIDFrom = maxIdDataset1 + 1)
+      case "csv" => CSVWrapper.loadProfiles2(dataset2Path, realIDField = "id", separator= separator, sourceId = 2, header = true, startIDFrom = maxIdDataset1 + 1)
       case "json" => JSONWrapper.loadProfiles(dataset2Path, realIDField = "realProfileID", sourceId = 2, startIDFrom = maxIdDataset1 + 1)
       case _ => {
         log.error("SPARKER - This filetype is not supported yet")
