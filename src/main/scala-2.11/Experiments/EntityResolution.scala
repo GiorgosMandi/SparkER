@@ -59,7 +59,7 @@ object EntityResolution {
     //Metablocking
     val blockIndexMap = blocksAfterFiltering.map(b => (b.blockID, b.profiles)).collectAsMap()
 
-    val blockIndex = sc.broadcast(blockIndexMap) // < ----- WARNING
+    val blockIndex = sc.broadcast(blockIndexMap) // < ----- WARNING this broadcasted variable is too big
 
     val profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]] = sc.broadcast(profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap())
 
@@ -134,15 +134,9 @@ object EntityResolution {
         )
     }
 
-
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
     val candidatePairs = edgesAndCount.flatMap(_._3)
-
-
-    blocksAfterFiltering.unpersist()
-    blockIndex.unpersist()
-    profileBlocksSizeIndex.unpersist()
 
     val pc = perfectMatch.toFloat / newGTSize.toFloat
     val pq = perfectMatch.toFloat / numCandidates.toFloat
@@ -161,19 +155,18 @@ object EntityResolution {
     log.info("SPARKER - Number of mathces " + matchesCount)
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    // unpersisting all the persisted RDDs
-    val rdds = sc.getPersistentRDDs
-    rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
-
+    /*// unpersisting all the persisted RDDs
+   val rdds = sc.getPersistentRDDs
+   rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
+   blocksAfterFiltering.unpersist()
+   blockIndex.unpersist()
+   profileBlocksSizeIndex.unpersist()*/
 
     //Clustering
     val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
       edgesThreshold = 0.5, separatorID = maxIdDataset1)
     clusters.setName("Clusters").cache()
     val numClusters = clusters.count()
-
-    matches.unpersist() // <-
-
 
     val endClusterTime = Calendar.getInstance()
     log.info("SPARKER - Clustering time " + (endClusterTime.getTimeInMillis - endMatchTime.getTimeInMillis) / 1000 / 60.0 + " min")
