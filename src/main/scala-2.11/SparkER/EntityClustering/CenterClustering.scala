@@ -2,6 +2,7 @@ package SparkER.EntityClustering
 
 import SparkER.DataStructures.{Profile, WeightedEdge}
 import SparkER.EntityClustering.EntityClusterUtils.{addUnclusteredProfiles, connectedComponents}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 object CenterClustering extends EntityClusteringTrait {
@@ -15,7 +16,7 @@ object CenterClustering extends EntityClusteringTrait {
       (x._1, edgesWeight / edgesAttached)
     }
 
-    val statsB = profiles.context.broadcast(stats.collectAsMap())
+    val statsB = SparkContext.getOrCreate().broadcast(stats.collectAsMap()) // <-- Warning: Expensive and costly action
 
     /** Generates the connected components */
     val cc = connectedComponents(filteredEdges)
