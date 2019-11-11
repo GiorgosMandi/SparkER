@@ -6,7 +6,7 @@ import SparkER.BlockBuildingMethods.TokenBlocking
 import SparkER.BlockRefinementMethods.PruningMethods.{CEP, CNP, PruningUtils, WEP, WNP}
 import SparkER.BlockRefinementMethods.{BlockFiltering, BlockPurging}
 import SparkER.DataStructures.Profile
-import SparkER.EntityClustering.{CenterClustering, EntityClusterUtils}
+import SparkER.EntityClustering.{CenterClustering, EntityClusterUtils, UniqueMappingClustering}
 import SparkER.EntityMatching.{EntityMatching, MatchingFunctions}
 import SparkER.Utilities.Converters
 import org.apache.log4j.Logger
@@ -155,15 +155,18 @@ object EntityResolution {
     log.info("SPARKER - Number of mathces " + matchesCount)
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    /*// unpersisting all the persisted RDDs
+   // unpersisting all the persisted RDDs
    val rdds = sc.getPersistentRDDs
    rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
    blocksAfterFiltering.unpersist()
    blockIndex.unpersist()
-   profileBlocksSizeIndex.unpersist()*/
+   profileBlocksSizeIndex.unpersist()
 
     //Clustering
-    val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
+    /*val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
+      edgesThreshold = 0.5, separatorID = maxIdDataset1)*/
+
+    val clusters = UniqueMappingClustering.getClusters(profiles, edges = matches, maxProfileID = maxProfileID.toInt,
       edgesThreshold = 0.5, separatorID = maxIdDataset1)
     clusters.setName("Clusters").cache()
     val numClusters = clusters.count()
