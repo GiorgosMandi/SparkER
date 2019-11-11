@@ -173,8 +173,8 @@ object MatchingFunctions {
   }
 
 
-  def getSimilarityEdges(profile1: Profile, profile2: Profile, threshold: Double)
-    : mutable.PriorityQueue[(Double, (String, String))] = {
+  def getSimilarityEdges(profile1: Profile, profile2: Profile, threshold: Double = 0.5)
+  : mutable.PriorityQueue[(Double, (String, String))] = {
 
     var similarityQueue = mutable.PriorityQueue[(Double, (String, String))]()
     for (attrIndex1 <- profile1.attributes.zipWithIndex;
