@@ -119,9 +119,14 @@ object EntityMatching {
     *  @return                    an RDD of WeightedEdges and its size
     * */
   def entityMatching(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
-                     matchingMethod : (Profile, Profile, (Profile, Profile) => Double ) => WeightedEdge,
-                     matchingFunctions: (Profile, Profile) => Double)
+                     matchingMethodLabel : String = "pm", threshold: Double = 0.5,
+                     matchingFunctions: (Profile, Profile) => Double = MatchingFunctions.jaccardSimilarity)
   : (RDD[WeightedEdge], Long) = {
+
+
+    val  matcher = if (matchingMethodLabel == "pm")
+        (p1: Profile, p2: Profile) => {this.profileMatching(p1, p2, matchingFunctions)}
+    else (p1: Profile, p2: Profile) => {this.groupLinkage(p1, p2, threshold)}
 
     val sc = SparkContext.getOrCreate()
 
@@ -141,7 +146,7 @@ object EntityMatching {
     val step = if (bcstep > 0) bcstep else ComparisonsPerPartitionSize
     val partitionGroupIter = (0 until comparisonsRDD.getNumPartitions).grouped(step)
 
-    while (partitionGroupIter.hasNext){
+    while (partitionGroupIter.hasNext) {
       val partitionGroup = partitionGroupIter.next()
 
       // collect and broadcast the comparisons
@@ -164,7 +169,7 @@ object EntityMatching {
                   comparisons
                     .filter(profilesM.contains)
                     .map(profilesM(_))
-                    .map(p => matchingMethod(profile1, p, matchingFunctions))
+                    .map(p =>{matcher(profile1, p)})
                     .filter(_.weight >= 0.5)
               }
               .toIterator
@@ -180,6 +185,7 @@ object EntityMatching {
       matchesCount += wEdges.count()
       comparisonsArrayBD.unpersist()
     }
+
 
     (matches, matchesCount)
   }
