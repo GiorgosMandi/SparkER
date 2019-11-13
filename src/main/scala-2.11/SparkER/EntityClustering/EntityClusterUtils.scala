@@ -27,7 +27,7 @@ object EntityClusterUtils {
     * If the algorithm doesn't converge, calculate the components using the GraphX library.
     **/
   def connectedComponents(weightedEdges: RDD[WeightedEdge]): RDD[Iterable[(Long, Long, Double)]] = {
-
+/*
     val ccNodes = ConnectedComponents.run(weightedEdges, 200)
 
       if (ccNodes._2){
@@ -61,7 +61,7 @@ object EntityClusterUtils {
           }
         }
       }
-/*
+*/
     val edgesG = weightedEdges.map(e =>
       Edge(e.firstProfileID, e.secondProfileID, e.weight)
     )
@@ -73,7 +73,7 @@ object EntityClusterUtils {
       }
     }
     connectedComponents
-*/
+
   }
 
 
