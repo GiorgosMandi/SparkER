@@ -19,7 +19,7 @@ object EntityResolution {
 
 
   def resolution(log:Logger, separators:Array[Long], profiles:RDD[Profile], startTime: Calendar, maxProfileID:Long,
-                 gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long, mode: String, metablocking: String,
+                 gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long, metablocking: String,
                  bcstep: Int = 8, partitions: Int = 0): Unit ={
 
     val sc = SparkContext.getOrCreate()
