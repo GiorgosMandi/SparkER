@@ -148,8 +148,8 @@ object EntityResolution {
 
     log.info("SPARKER - Metablocking time " + (endMBTime.getTimeInMillis - fTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    val (matches , matchesCount) = EntityMatching.entityMatchingAl(profiles, candidatePairs, bcstep,
-      "pm", matchingFunctions = MatchingFunctions.jaccardSimilarity)
+    val (matches , matchesCount) = EntityMatching.entityMatching(profiles, candidatePairs, bcstep,
+      matchingFunctions = MatchingFunctions.jaccardSimilarity)
 
     val endMatchTime = Calendar.getInstance()
     log.info("SPARKER - Number of mathces " + matchesCount)
@@ -163,11 +163,10 @@ object EntityResolution {
    profileBlocksSizeIndex.unpersist()
 
     //Clustering
-    /*val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
-      edgesThreshold = 0.5, separatorID = maxIdDataset1)*/
-
-    val clusters = UniqueMappingClustering.getClusters(profiles, edges = matches, maxProfileID = maxProfileID.toInt,
+    val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
       edgesThreshold = 0.5, separatorID = maxIdDataset1)
+    //val clusters = UniqueMappingClustering.getClusters(profiles, edges = matches, maxProfileID = maxProfileID.toInt, edgesThreshold = 0.5, separatorID = maxIdDataset1)
+
     clusters.setName("Clusters").cache()
     val numClusters = clusters.count()
 
