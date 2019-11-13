@@ -190,34 +190,71 @@ object EntityMatching {
     (matches, matchesCount)
   }
 
-  def entityMatchingAlt(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
-                     matchingMethod : (Profile, Profile, (Profile, Profile) => Double ) => WeightedEdge,
-                     matchingFunctions: (Profile, Profile) => Double)
+
+
+  def entityMatchingAl(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
+                       matchingMethodLabel : String = "pm", threshold: Double = 0.5,
+                       matchingFunctions: (Profile, Profile) => Double = MatchingFunctions.jaccardSimilarity)
   : (RDD[WeightedEdge], Long) = {
 
     val comparisonsRDD = getComparisons(candidatePairs, profiles)
-      .flatMap(x => x._2.map(id => (id, Array(x._1)))) // Warning: Shuffle-Write is too much!!
-      .reduceByKey(_++_)
-      .setName("ComparisonsPerPartition")
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .flatMap(x => x._2.map(id => (id, x._1)))
+
 
     val profilesID = profiles.map(p => (p.id.toInt, p))
 
-    val profilesComparisons = profilesID.leftOuterJoin(comparisonsRDD)
-    val matches = profilesComparisons
-      .filter(comparisons => !comparisons._2._2.getOrElse(Array()).isEmpty)
-      .flatMap {
-        comparisons =>
-          val profile1 = comparisons._2._1
-          val profilesArray = comparisons._2._2.get
-          profilesArray
-            .map(profile2 => matchingMethod(profile1, profile2, matchingFunctions))
-            .filter(_.weight >= 0.5)
-      }
-      .setName("Matches")
-      .persist(StorageLevel.MEMORY_AND_DISK)
+    val ComparisonsPerPartitionSize = comparisonsRDD.getNumPartitions
+    val step = if (bcstep > 0) bcstep else ComparisonsPerPartitionSize
+    val partitionGroupIter = (0 until comparisonsRDD.getNumPartitions).grouped(step)
 
-    (matches, matches.count())
+    var matches : RDD[WeightedEdge] = SparkContext.getOrCreate().emptyRDD
+    var matchesCount : Long = 0
+
+    while (partitionGroupIter.hasNext) {
+      val partitionGroup = partitionGroupIter.next()
+      val comparisonsPartRDD = comparisonsRDD
+        .mapPartitionsWithIndex({
+          (index, partition) =>
+            if (partitionGroup.contains(index)) {
+              var partitionMap: Map[Int, Array[Profile]] = Map()
+              partition.foreach {
+                case (id, profile) =>
+                  if (partitionMap.contains(id)) {
+                    val comp: Array[Profile] = partitionMap(id) :+ profile
+                    partitionMap += (id -> comp)
+                  }
+                  else {
+                    val comp: Array[Profile] = Array(profile)
+                    partitionMap += (id -> comp)
+                  }
+              }
+              partitionMap.keySet.map(key => (key, partitionMap(key))).toIterator
+            }
+            else
+              Iterator()}
+          , preservesPartitioning = true)
+
+      val profilesComparisons = comparisonsPartRDD.leftOuterJoin(profilesID)
+      val wEdges = profilesComparisons
+        .filter(comparisons => comparisons._2._2.orNull != null)
+        .flatMap {
+          comparisons =>
+            val profile1 = comparisons._2._2.get
+            val profilesArray = comparisons._2._1
+            profilesArray
+              .map(profile2 => profileMatching(profile1, profile2, matchingFunctions))
+              .filter(_.weight >= 0.5)
+        }
+      matches = matches union wEdges
+
+      //cache only if it's the final execution
+      if (!partitionGroupIter.hasNext)
+        matches.setName("Matches").persist(StorageLevel.MEMORY_AND_DISK)
+
+      // if count occurs outside of the for loop, then the Executors will collect all the parts of the comparisonsRDD
+      matchesCount += wEdges.count()
+    }
+    (matches, matchesCount)
 
     }
 
