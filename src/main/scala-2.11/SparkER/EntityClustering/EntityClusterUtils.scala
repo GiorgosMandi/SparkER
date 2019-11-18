@@ -115,11 +115,10 @@ object EntityClusterUtils {
 
     val (comparisons, matches) = res.reduce((x, y) => (x._1 + y._1, x._2 + y._2))
 
-    gtBroadcast.unpersist()
-
     val recall = matches / gtBroadcast.value.size
     val precision = matches / comparisons
 
+    gtBroadcast.unpersist()
     (recall, precision)
   }
 
