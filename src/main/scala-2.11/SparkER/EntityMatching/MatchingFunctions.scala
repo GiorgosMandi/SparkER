@@ -14,6 +14,20 @@ object MatchingFunctions {
     attribute.value.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).map(_.toLowerCase.trim).filter(_.length > 0).toSet
   }
 
+  def getCharactersFrequency(p: Profile, n:Int): Map[String, Int] = {
+    p.attributes
+      .map(_.value)
+      .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
+      .map(_.toLowerCase)//.trim)
+      .filter(_.length > 0)
+      .flatMap(_.toCharArray)
+      .sliding(n)
+      .toList
+      .map(_.mkString(""))
+      .groupBy(x => x)
+      .map(x => (x._1, x._2.length))
+  }
+
   def getCharacters(p: Profile, n:Int): Set[String] = {
     p.attributes
       .map(_.value)
@@ -26,19 +40,8 @@ object MatchingFunctions {
       .toSet
   }
 
-  def getCharacters(attribute: KeyValue, n:Int): Set[String] = {
-    attribute.value
-      .split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)
-      .map(_.toLowerCase.trim)
-      .filter(_.length > 0)
-      .flatMap(_.toCharArray)
-      .sliding(n)
-      .map(_.mkString(""))
-      .toSet
-  }
 
-
-  def getNGramsFrequency(p: Profile, n: Int = 1 ): List[(String, Int)] = {
+  def getNGramsFrequency(p: Profile, n: Int = 1 ): Map[String, Int] = {
     p.attributes
       .map(_.value)
       .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
@@ -49,12 +52,11 @@ object MatchingFunctions {
       .map(_.mkString(" "))
       .groupBy(x => x)
       .map(x => (x._1, x._2.length))
-      .toList
   }
 
 
-  def getVectorMagnitude(vector: List[(String, Int)], totalSize: Double): Double ={
-    val maginitude = vector.map(t => Math.pow(t._2.toDouble / totalSize, 2.0)).sum
+  def getVectorMagnitude(vector: Map[String, Int], totalSize: Double): Double ={
+    val maginitude = vector.map(t =>  Math.pow(t._2.toDouble / totalSize, 2.0)).sum
     Math.sqrt(maginitude)
   }
 
@@ -69,8 +71,6 @@ object MatchingFunctions {
   def jaccardSimilarity(k1: KeyValue, k2: KeyValue): Double = {
     val t1 = getTokens(k1)
     val t2 = getTokens(k2)
-    //val t1 = getCharacters(k1, 2)
-    //val t2 = getCharacters(k2, 2)
     val common = t1.intersect(t2).size.toDouble
     common / (t1.size + t2.size - common)
   }
@@ -83,27 +83,27 @@ object MatchingFunctions {
     val itemVector2 = getNGramsFrequency(p2)
 
     //calculate the total tokens of the entities
-    val totalTerms1 = p1.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
-    val totalTerms2 = p2.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
+    val totalTerms1 = itemVector1.keySet.size
+    val totalTerms2 = itemVector2.keySet.size
 
-    val vector1IsSmaller = itemVector1.size < itemVector2.size
+    val vector1IsSmaller = totalTerms1 < totalTerms2
     val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
     val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
 
-    val mapMinVector = minItemVector.toMap
     val numerator = maxItemVector
-      .filter(t => mapMinVector.contains(t._1))
-      .map(t => Math.min(t._2, mapMinVector(t._1)))
+      .filter(t => minItemVector.contains(t._1))
+      .map(t => Math.min(t._2, minItemVector(t._1)))
       .sum
+      .toDouble
 
-    val denominator = totalTerms1 + totalTerms2 - numerator;
+    val denominator = totalTerms1 + totalTerms2 - numerator.toDouble;
 
     numerator / denominator
   }
 
 
 
-  // TODO: Something is wrong -- Too many matches
+
   def tfGeneralizedJaccardSimilarity(p1: Profile, p2: Profile): Double ={
 
     // calculate the frequencies of the tokens/ngrams
@@ -111,32 +111,23 @@ object MatchingFunctions {
     val itemVector2 = getNGramsFrequency(p2)
 
     //calculate the total tokens of the entities
-    val totalTerms1 = p1.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
-    val totalTerms2 = p2.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
+    val totalTerms1 = itemVector1.size
+    val totalTerms2 = itemVector2.size
 
-
-    val vector1IsSmaller = itemVector1.size < itemVector2.size
+    val vector1IsSmaller = totalTerms1 < totalTerms2
     val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
     val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
     val maxTotalTerms = { if (vector1IsSmaller) totalTerms2 else totalTerms1}
     val minTotalTerms = { if (vector1IsSmaller) totalTerms1 else totalTerms2}
 
-    val mapMinVector = minItemVector.toMap
-    val mapMaxVector = maxItemVector.toMap
-
-
     val numerator = maxItemVector
-      .map(t => Math.min(t._2.toDouble/maxTotalTerms, {if(mapMinVector.contains(t._1)) mapMinVector(t._1).toDouble else 0.0} /minTotalTerms))
+      .map(t => Math.min(t._2.toDouble/maxTotalTerms, minItemVector.getOrElse(t._1, 0).toDouble/minTotalTerms))
       .sum
 
-    var allKeys = mapMaxVector.keySet
-    allKeys ++= mapMinVector.keySet
+    var allKeys = maxItemVector.keySet
+    allKeys ++= minItemVector.keySet
     val denominator = allKeys
-      .map(key => Math.max({
-        if (mapMaxVector.contains(key)) mapMaxVector(key).toDouble else 0.0
-      } / maxTotalTerms, {
-        if (mapMinVector.contains(key)) mapMinVector(key).toDouble else 0.0
-      } / minTotalTerms))
+      .map(key => Math.max(minItemVector.getOrElse(key, 0).toDouble/maxTotalTerms, minItemVector.getOrElse(key, 0).toDouble/minTotalTerms))
       .sum
 
     numerator / denominator
@@ -150,25 +141,45 @@ object MatchingFunctions {
     val itemVector2 = getNGramsFrequency(p2)
 
     //calculate the total tokens of the entities
-    val totalTerms1 = p1.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
-    val totalTerms2 = p2.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).count(_.length > 0).toDouble
+    val totalTerms1 = itemVector1.keySet.size
+    val totalTerms2 = itemVector2.keySet.size
 
-    val maxItemVector = itemVector1
-    val minItemVector = itemVector2
-    if (itemVector1.size < itemVector2.size){
-      val maxItemVector = itemVector2
-      val minItemVector = itemVector1
-    }
+    val vector1IsSmaller = totalTerms1 < totalTerms2
+    val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
+    val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
 
     // calculate the TF Cosine similarity
-    val mapMinVector = minItemVector.toMap
     val numerator = maxItemVector
-      .filter(t => mapMinVector.contains(t._1))
-      .map(t => (t._2 * mapMinVector(t._1)).toDouble / totalTerms1 / totalTerms2)
+      .filter(t => minItemVector.contains(t._1))
+      .map(t => (t._2 * minItemVector(t._1)).toDouble / totalTerms1 / totalTerms2)
       .sum
 
-    val denominator = getVectorMagnitude(itemVector1, totalTerms1) * getVectorMagnitude(itemVector2, totalTerms1)
+    val denominator = getVectorMagnitude(itemVector1, totalTerms1) * getVectorMagnitude(itemVector2, totalTerms2)
 
+    numerator / denominator
+  }
+
+
+  def chfCosineSimilarity(p1: Profile, p2: Profile ): Double = {
+
+    // calculate the frequencies of the ngrams
+    val itemVector1 = getCharactersFrequency(p1, 2)
+    val itemVector2 = getCharactersFrequency(p2, 2)
+
+    //calculate the total tokens of the entities
+    val totalTerms1 = itemVector1.keySet.size
+    val totalTerms2 = itemVector2.keySet.size
+
+    val vector1IsSmaller = totalTerms1 < totalTerms2
+    val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
+    val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
+
+    var numerator = 0.0
+    maxItemVector.foreach{
+      item =>
+        numerator += item._2 * minItemVector.getOrElse(item._1, 0).toDouble /totalTerms1 / totalTerms2
+    }
+    val denominator =  getVectorMagnitude(itemVector1, totalTerms1) * getVectorMagnitude(itemVector2, totalTerms2)
     numerator / denominator
   }
 
