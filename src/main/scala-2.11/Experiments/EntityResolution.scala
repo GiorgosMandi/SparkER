@@ -39,7 +39,7 @@ object EntityResolution {
 
 
     //Purging
-    val blocksPurged = BlockPurging.blockPurging(blocks, 1.00)
+    val blocksPurged = BlockPurging.blockPurging(blocks, 1.025)
 
     blocksPurged.setName("BloksPurged").cache()
     val puTime = Calendar.getInstance()
@@ -137,6 +137,7 @@ object EntityResolution {
     }
 
     edgesAndCount.setName("edgesAndCount").persist(StorageLevel.MEMORY_AND_DISK) // WARNING: this might be dangerous for big datasets
+
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
     val candidatePairs = edgesAndCount.flatMap(_._3)
@@ -152,19 +153,16 @@ object EntityResolution {
 
     log.info("SPARKER - Metablocking time " + (endMBTime.getTimeInMillis - fTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    val (matches , matchesCount) = EntityMatching.entityMatching(profiles, candidatePairs, bcstep,
-      matchingFunctions = MatchingFunctions.jaccardSimilarity)
+    val (matches , matchesCount) = EntityMatching.entityMatchingJOIN(profiles, candidatePairs, bcstep,
+      matchingFunctions = MatchingFunctions.chfCosineSimilarity)
 
     val endMatchTime = Calendar.getInstance()
     log.info("SPARKER - Number of mathces " + matchesCount)
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-   // unpersisting all the persisted RDDs
-   val rdds = sc.getPersistentRDDs
-   rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
-   blocksAfterFiltering.unpersist()
-   blockIndex.unpersist()
+    blockIndex.unpersist()
     profileBlocksSizeIndex.unpersist()
+    edgesAndCount.unpersist()
 
     //Clustering
     val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
