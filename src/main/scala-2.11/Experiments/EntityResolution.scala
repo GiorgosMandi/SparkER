@@ -13,6 +13,8 @@ import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+
 
 object EntityResolution {
 
@@ -134,9 +136,11 @@ object EntityResolution {
         )
     }
 
+    edgesAndCount.setName("edgesAndCount").persist(StorageLevel.MEMORY_AND_DISK) // WARNING: this might be dangerous for big datasets
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
     val candidatePairs = edgesAndCount.flatMap(_._3)
+    blocksAfterFiltering.unpersist()
 
     val pc = perfectMatch.toFloat / newGTSize.toFloat
     val pq = perfectMatch.toFloat / numCandidates.toFloat
@@ -160,7 +164,7 @@ object EntityResolution {
    rdds.filter(rdd => rdd._2.name != "Matches").foreach(_._2.unpersist())
    blocksAfterFiltering.unpersist()
    blockIndex.unpersist()
-   profileBlocksSizeIndex.unpersist()
+    profileBlocksSizeIndex.unpersist()
 
     //Clustering
     val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
