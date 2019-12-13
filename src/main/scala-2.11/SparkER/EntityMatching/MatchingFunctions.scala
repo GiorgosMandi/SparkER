@@ -1,7 +1,6 @@
 package SparkER.EntityMatching
 
 import SparkER.DataStructures.{KeyValue, Profile}
-
 import scala.collection.mutable
 
 object MatchingFunctions {
@@ -14,20 +13,6 @@ object MatchingFunctions {
     attribute.value.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).map(_.toLowerCase.trim).filter(_.length > 0).toSet
   }
 
-  def getCharactersFrequency(p: Profile, n:Int): Map[String, Int] = {
-    p.attributes
-      .map(_.value)
-      .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
-      .map(_.toLowerCase)//.trim)
-      .filter(_.length > 0)
-      .flatMap(_.toCharArray)
-      .sliding(n)
-      .toList
-      .map(_.mkString(""))
-      .groupBy(x => x)
-      .map(x => (x._1, x._2.length))
-  }
-
   def getCharacters(p: Profile, n:Int): Set[String] = {
     p.attributes
       .map(_.value)
@@ -38,6 +23,21 @@ object MatchingFunctions {
       .sliding(n)
       .map(_.mkString(""))
       .toSet
+  }
+
+
+  def getCharactersFrequency(p: Profile, n:Int): Map[String, Int] = {
+    p.attributes
+      .map(_.value)
+      .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
+      .map(_.toLowerCase.trim)
+      .filter(_.length > 0)
+      .flatMap(_.toCharArray)
+      .sliding(n)
+      .toList
+      .map(_.mkString(""))
+      .groupBy(x => x)
+      .map(x => (x._1, x._2.length))
   }
 
 

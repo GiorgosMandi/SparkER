@@ -23,8 +23,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    // Logger.getLogger("org").setLevel(Level.ERROR)
-    // Logger.getLogger("akka").setLevel(Level.ERROR)
+    Logger.getLogger("org").setLevel(Level.ERROR)
+    Logger.getLogger("akka").setLevel(Level.ERROR)
     val log = LogManager.getRootLogger
     log.setLevel(Level.INFO)
 
@@ -112,7 +112,7 @@ object Main {
       EntityResolution.resolution(log, Array(), profiles, startTime, maxProfileID, gt, newGTSize, -1,  metablocking, bcstep)
     }
 
-    System.in.read()
+    //System.in.read()
     sc.stop()
   }
 
@@ -295,8 +295,5 @@ object Main {
     (profiles, newGT)
 
   }
-
-
-
 }
 
