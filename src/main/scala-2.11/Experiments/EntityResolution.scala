@@ -141,6 +141,8 @@ object EntityResolution {
     val numCandidates = edgesAndCount.map(_._1).sum()
     val perfectMatch = edgesAndCount.map(_._2).sum()
     val candidatePairs = edgesAndCount.flatMap(_._3)
+    blockIndex.unpersist()
+    profileBlocksSizeIndex.unpersist()
     blocksAfterFiltering.unpersist()
 
     val pc = perfectMatch.toFloat / newGTSize.toFloat
@@ -160,8 +162,6 @@ object EntityResolution {
     log.info("SPARKER - Number of mathces " + matchesCount)
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
-    blockIndex.unpersist()
-    profileBlocksSizeIndex.unpersist()
     edgesAndCount.unpersist()
 
     //Clustering
