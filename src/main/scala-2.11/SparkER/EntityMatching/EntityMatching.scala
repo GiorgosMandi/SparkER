@@ -207,8 +207,8 @@ object EntityMatching {
       .leftOuterJoin(profilesID)
       .map(p => (p._2._2.orNull, p._2._1))
       .filter(_._1 != null)
-      .setName("ComparisonsRDD")
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      //.setName("ComparisonsRDD")
+      //.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
     // comparisons
     val matches = comparisonsRDD
@@ -219,6 +219,7 @@ object EntityMatching {
           .map(matcher(profile1, _))
           .filter(_.weight >= 0.5)
       }
+      .setName("Matches")
       .persist(StorageLevel.MEMORY_AND_DISK)
 
     (matches, matches.count)
