@@ -144,6 +144,7 @@ object EntityResolution {
     blockIndex.unpersist()
     profileBlocksSizeIndex.unpersist()
     blocksAfterFiltering.unpersist()
+    profileBlocks.unpersist()
 
     val pc = perfectMatch.toFloat / newGTSize.toFloat
     val pq = perfectMatch.toFloat / numCandidates.toFloat
@@ -163,6 +164,8 @@ object EntityResolution {
     log.info("SPARKER - Matching time " + (endMatchTime.getTimeInMillis - endMBTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
     edgesAndCount.unpersist()
+    blockIndex.destroy()
+    profileBlocksSizeIndex.destroy()
 
     //Clustering
     val clusters = CenterClustering.getClusters(profiles = profiles, edges = matches, maxProfileID = maxProfileID.toInt,
