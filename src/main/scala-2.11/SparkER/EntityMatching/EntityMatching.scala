@@ -106,7 +106,7 @@ object EntityMatching {
     * */
  def entityMatchingCB(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
                      matchingMethodLabel : String = "pm", threshold: Double = 0.5,
-                     matchingFunctions: (Profile, Profile) => Double = MatchingFunctions.jaccardSimilarity)
+                     matchingFunctions: (Profile, Profile) => Double)
   : (RDD[WeightedEdge], Long) = {
 
     // set the entity matching function, either profile matcher or group linkage
@@ -190,8 +190,8 @@ object EntityMatching {
     * @return                     an RDD of WeighetedEdges
     */
   def entityMatchingJOIN(profiles : RDD[Profile], candidatePairs : RDD[UnweightedEdge], bcstep : Int,
-                       matchingMethodLabel : String = "pm", threshold: Double = 0.5,
-                       matchingFunctions: (Profile, Profile) => Double = MatchingFunctions.jaccardSimilarity)
+                       matchingMethodLabel : String = "pm", threshold: Double = 0.5, ngramSize:Int = 1,
+                       matchingFunctions: (Profile, Profile) => Double)
   : (RDD[WeightedEdge], Long) = {
 
     // set the entity matching function, either profile matcher or group linkage
@@ -207,8 +207,6 @@ object EntityMatching {
       .leftOuterJoin(profilesID)
       .map(p => (p._2._2.orNull, p._2._1))
       .filter(_._1 != null)
-      //.setName("ComparisonsRDD")
-      //.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
     // comparisons
     val matches = comparisonsRDD

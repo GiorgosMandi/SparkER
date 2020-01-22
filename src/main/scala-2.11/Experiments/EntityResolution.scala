@@ -18,24 +18,21 @@ import org.apache.spark.storage.StorageLevel
 
 object EntityResolution {
 
-
-
-  def resolution(log:Logger, separators:Array[Long], profiles:RDD[Profile], startTime: Calendar, maxProfileID:Long,
-                 gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long, metablocking: String,
-                 bcstep: Int = 8, partitions: Int = 0): Unit ={
+  def resolution(log:Logger, separators:Array[Long], profiles:RDD[Profile], profiles_count: Long,
+                 maxProfileID:Long, gt:Broadcast[Set[(Long, Long)]], newGTSize:Int, maxIdDataset1:Long,
+                 metablocking: String, bcstep: Int = 8, partitions: Int = 0): Unit ={
 
     val sc = SparkContext.getOrCreate()
 
     //Token blocking
+    val startTime =  Calendar.getInstance()
     val blocks = TokenBlocking.createBlocks(profiles, separators)
     val useEntropy = false
-
     blocks.setName("Blocks").cache()
     val numBlocks = blocks.count()
     val bTime = Calendar.getInstance()
     log.info("SPARKER - Number of blocks " + numBlocks)
     log.info("SPARKER - Time to blocking " + (bTime.getTimeInMillis - startTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
-
 
 
     //Purging
@@ -106,7 +103,7 @@ object EntityResolution {
       case "CNP" =>
         CNP.CNP(
           blocks,
-          profiles.count(),
+          profiles_count,
           profileBlocksFiltered,
           blockIndex.asInstanceOf[Broadcast[scala.collection.Map[Long, Array[Set[Long]]]]],
           maxProfileID.toInt,
@@ -156,8 +153,12 @@ object EntityResolution {
 
     log.info("SPARKER - Metablocking time " + (endMBTime.getTimeInMillis - fTime.getTimeInMillis) / 1000 / 60.0 + " min")
 
+    // initialize the getTokens functions (either words or char and n-grams size) and the similarity function
+    val getTokens = (p:Profile, i:Int) => MatchingFunctions.getCharactersFrequency(p, i)
+    val mf = MatchingFunctions.cosineSimilarity(getTokens, 2)(_, _)
     val (matches , matchesCount) = EntityMatching.entityMatchingJOIN(profiles, candidatePairs, bcstep,
-      matchingFunctions = MatchingFunctions.chfCosineSimilarity)
+      //matchingFunctions = MatchingFunctions.chfCosineSimilarity)
+      matchingFunctions = mf)
 
     val endMatchTime = Calendar.getInstance()
     log.info("SPARKER - Number of mathces " + matchesCount)
@@ -187,7 +188,6 @@ object EntityResolution {
 
     val endTime = Calendar.getInstance()
     log.info("SPARKER - Execution time " + (endTime.getTimeInMillis - startTime.getTimeInMillis) / 1000 / 60.0 + " min")
-
   }
 
 

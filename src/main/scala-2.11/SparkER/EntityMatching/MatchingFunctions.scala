@@ -5,15 +5,28 @@ import scala.collection.mutable
 
 object MatchingFunctions {
 
-  def getTokens(p: Profile): Set[String] = {
-    p.attributes.map(_.value).flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).map(_.toLowerCase.trim).filter(_.length > 0).toSet
+  def getWords(p: Profile, n:Int = 1): Set[String] = {
+    p.attributes
+      .map(_.value)
+      .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
+      .map(_.toLowerCase.trim)
+      .filter(_.length > 0)
+      .sliding(n)
+      .map(_.mkString(" "))
+      .toSet
   }
 
-  def getTokens(attribute: KeyValue): Set[String] = {
-    attribute.value.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).map(_.toLowerCase.trim).filter(_.length > 0).toSet
+  def getWordsFromKeyValues(attribute: KeyValue, n:Int = 1): Set[String] = {
+    attribute.value
+      .split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)
+      .map(_.toLowerCase.trim)
+      .filter(_.length > 0)
+      .sliding(n)
+      .map(_.mkString(" "))
+      .toSet
   }
 
-  def getCharacters(p: Profile, n:Int): Set[String] = {
+  def getCharacters(p: Profile, n:Int = 1): Set[String] = {
     p.attributes
       .map(_.value)
       .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
@@ -26,7 +39,7 @@ object MatchingFunctions {
   }
 
 
-  def getCharactersFrequency(p: Profile, n:Int): Map[String, Int] = {
+  def getCharactersFrequency(p: Profile, n:Int = 1): Map[String, Int] = {
     p.attributes
       .map(_.value)
       .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
@@ -41,7 +54,7 @@ object MatchingFunctions {
   }
 
 
-  def getNGramsFrequency(p: Profile, n: Int = 1 ): Map[String, Int] = {
+  def getWordsFrequency(p: Profile, n:Int = 1 ): Map[String, Int] = {
     p.attributes
       .map(_.value)
       .flatMap(_.split(SparkER.BlockBuildingMethods.BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING))
@@ -61,26 +74,26 @@ object MatchingFunctions {
   }
 
 
-  def jaccardSimilarity(p1: Profile, p2: Profile): Double = {
-    val t1 = getTokens(p1)
-    val t2 = getTokens(p2)
+  def jaccardSimilarity(getTokens: (Profile, Int) => Set[String], ngramsSize:Int = 1)(p1: Profile, p2: Profile): Double = {
+    val t1 = getTokens(p1, ngramsSize)
+    val t2 = getTokens(p2, ngramsSize)
     val common = t1.intersect(t2).size.toDouble
     common / (t1.size + t2.size - common)
   }
 
   def jaccardSimilarity(k1: KeyValue, k2: KeyValue): Double = {
-    val t1 = getTokens(k1)
-    val t2 = getTokens(k2)
+    val t1 = getWordsFromKeyValues(k1)
+    val t2 = getWordsFromKeyValues(k2)
     val common = t1.intersect(t2).size.toDouble
     common / (t1.size + t2.size - common)
   }
 
 
-  def enhancedJaccardSimilarity(p1: Profile, p2: Profile): Double = {
+  def enhancedJaccardSimilarity(getTokensFrequency: (Profile, Int) => Map[String, Int], ngramsSize:Int = 1)(p1: Profile, p2: Profile): Double = {
 
     // calculate the frequencies of the tokens/ngrams
-    val itemVector1 = getNGramsFrequency(p1)
-    val itemVector2 = getNGramsFrequency(p2)
+    val itemVector1 = getTokensFrequency(p1, ngramsSize)
+    val itemVector2 = getTokensFrequency(p2, ngramsSize)
 
     //calculate the total tokens of the entities
     val totalTerms1 = itemVector1.keySet.size
@@ -102,13 +115,11 @@ object MatchingFunctions {
   }
 
 
-
-
-  def tfGeneralizedJaccardSimilarity(p1: Profile, p2: Profile): Double ={
+  def generalizedJaccardSimilarity(getTokensFrequency: (Profile, Int) => Map[String, Int], ngramsSize:Int = 1)(p1: Profile, p2: Profile): Double ={
 
     // calculate the frequencies of the tokens/ngrams
-    val itemVector1 = getNGramsFrequency(p1)
-    val itemVector2 = getNGramsFrequency(p2)
+    val itemVector1 = getTokensFrequency(p1, ngramsSize)
+    val itemVector2 = getTokensFrequency(p2, ngramsSize)
 
     //calculate the total tokens of the entities
     val totalTerms1 = itemVector1.size
@@ -134,11 +145,11 @@ object MatchingFunctions {
   }
 
 
-  def tfCosineSimilarity(p1: Profile, p2: Profile ): Double = {
+  def cosineSimilarity(getTokensFrequency: (Profile, Int) => Map[String, Int], ngramsSize:Int = 1)(p1: Profile, p2: Profile ): Double = {
 
     // calculate the frequencies of the tokens/ngrams
-    val itemVector1 = getNGramsFrequency(p1)
-    val itemVector2 = getNGramsFrequency(p2)
+    val itemVector1 = getTokensFrequency(p1, ngramsSize)
+    val itemVector2 = getTokensFrequency(p2, ngramsSize)
 
     //calculate the total tokens of the entities
     val totalTerms1 = itemVector1.keySet.size
@@ -147,39 +158,12 @@ object MatchingFunctions {
     val vector1IsSmaller = totalTerms1 < totalTerms2
     val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
     val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
-
     // calculate the TF Cosine similarity
     val numerator = maxItemVector
       .filter(t => minItemVector.contains(t._1))
       .map(t => (t._2 * minItemVector(t._1)).toDouble / totalTerms1 / totalTerms2)
       .sum
-
     val denominator = getVectorMagnitude(itemVector1, totalTerms1) * getVectorMagnitude(itemVector2, totalTerms2)
-
-    numerator / denominator
-  }
-
-
-  def chfCosineSimilarity(p1: Profile, p2: Profile ): Double = {
-
-    // calculate the frequencies of the ngrams
-    val itemVector1 = getCharactersFrequency(p1, 2)
-    val itemVector2 = getCharactersFrequency(p2, 2)
-
-    //calculate the total tokens of the entities
-    val totalTerms1 = itemVector1.keySet.size
-    val totalTerms2 = itemVector2.keySet.size
-
-    val vector1IsSmaller = totalTerms1 < totalTerms2
-    val maxItemVector = { if (vector1IsSmaller) itemVector2 else itemVector1}
-    val minItemVector = { if (vector1IsSmaller) itemVector1 else itemVector2}
-
-    var numerator = 0.0
-    maxItemVector.foreach{
-      item =>
-        numerator += item._2 * minItemVector.getOrElse(item._1, 0).toDouble /totalTerms1 / totalTerms2
-    }
-    val denominator =  getVectorMagnitude(itemVector1, totalTerms1) * getVectorMagnitude(itemVector2, totalTerms2)
     numerator / denominator
   }
 
@@ -204,7 +188,5 @@ object MatchingFunctions {
     }
     similarityQueue
   }
-
-
 
 }

@@ -97,19 +97,19 @@ object Main {
 
     // choose between clean-clean or dirty ER
     if (options.contains("d2")) {
-      val (profiles, newGT, separators) = cleanCleanER(options, log)
+      val (profiles, profiles_count, newGT, separators) = cleanCleanER(options, log)
       val maxProfileID = profiles.map(_.id).max()
       val maxIdDataset1 = profiles.filter(_.sourceId == 1).map(_.id).max()
       val newGTSize = newGT.size
       val gt = sc.broadcast(newGT)
-      EntityResolution.resolution(log, separators, profiles, startTime, maxProfileID, gt, newGTSize, maxIdDataset1,  metablocking, bcstep)
+      EntityResolution.resolution(log, separators, profiles, profiles_count, maxProfileID, gt, newGTSize, maxIdDataset1,  metablocking, bcstep)
 
     } else {
-      val (profiles, newGT) = dirtyER(options, log)
+      val (profiles, profiles_count, newGT) = dirtyER(options, log)
       val newGTSize = newGT.size
       val gt = sc.broadcast(newGT)
       val maxProfileID = profiles.map(_.id).max()
-      EntityResolution.resolution(log, Array(), profiles, startTime, maxProfileID, gt, newGTSize, -1,  metablocking, bcstep)
+      EntityResolution.resolution(log, Array(), profiles, profiles_count, maxProfileID, gt, newGTSize, -1,  metablocking, bcstep)
     }
 
     //System.in.read()
@@ -125,7 +125,7 @@ object Main {
     * @param log logger
     * @return the loaded profiles as RDD, the loaded ground truth and an array of separators
     */
-  def cleanCleanER(options : Map[String, String], log : Logger) : (RDD[Profile], Set[(Long, Long)], Array[Long]) ={
+  def cleanCleanER(options : Map[String, String], log : Logger) : (RDD[Profile], Long, Set[(Long, Long)], Array[Long]) ={
     val sc = SparkContext.getOrCreate()
 
     val separator =
@@ -167,11 +167,18 @@ object Main {
     // Reading input profiles
     val separators = Array(maxIdDataset1)
     var profiles = dataset1.union(dataset2)
-    if (options.contains("partitions"))  profiles = profiles.repartition(options("partitions").toInt)
+    if (options.contains("partitions"))  {
+      val p = options("partitions").toInt
+      if (profiles.getNumPartitions > p)
+        profiles = profiles.repartition(p)
+      else
+        profiles = profiles.coalesce(p)
+    }
     profiles.setName("Profiles").cache()
 
     val pTime = Calendar.getInstance()
-    log.info("SPARKER - Loaded profiles " + profiles.count())
+    val profiles_count = profiles.count()
+    log.info("SPARKER - Loaded profiles " + profiles_count)
     log.info("SPARKER - Profiles Partitions " + profiles.getNumPartitions)
     log.info("SPARKER - Time to load profiles " + (pTime.getTimeInMillis - startTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
@@ -220,7 +227,7 @@ object Main {
     val gtTime = Calendar.getInstance()
     log.info("SPARKER - Time to load groundtruth " + (gtTime.getTimeInMillis - pTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
-    (profiles, newGT, separators)
+    (profiles, profiles_count, newGT, separators)
 
   }
 
@@ -234,7 +241,7 @@ object Main {
     * @param log logger
     * @return the loaded profiles as RDD and the loaded ground truth
     */
-  def dirtyER(options : Map[String, String], log : Logger) : (RDD[Profile], Set[(Long, Long)]) ={
+  def dirtyER(options : Map[String, String], log : Logger) : (RDD[Profile], Long, Set[(Long, Long)]) ={
     val sc = SparkContext.getOrCreate()
 
     val separator =
@@ -258,11 +265,18 @@ object Main {
       }
 
     var profiles = dataset1
-    if (options.contains("partitions"))  profiles = profiles.repartition(options("partitions").toInt)
+    if (options.contains("partitions"))  {
+      val p = options("partitions").toInt
+      if (profiles.getNumPartitions > p)
+        profiles = profiles.repartition(p)
+      else
+        profiles = profiles.coalesce(p)
+    }
     profiles.setName("Profiles").cache()
 
     val pTime = Calendar.getInstance()
-    log.info("SPARKER - Loaded profiles " + profiles.count())
+    val profiles_count = profiles.count()
+    log.info("SPARKER - Loaded profiles " + profiles_count)
     log.info("SPARKER - Profiles Partitions " + profiles.getNumPartitions)
     log.info("SPARKER - Time to load profiles " + (pTime.getTimeInMillis - startTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
@@ -292,7 +306,7 @@ object Main {
     val gtTime = Calendar.getInstance()
     log.info("SPARKER - Time to load groundtruth " + (gtTime.getTimeInMillis - pTime.getTimeInMillis) / 1000.0 / 60.0 + " min")
 
-    (profiles, newGT)
+    (profiles, profiles_count, newGT)
 
   }
 }
