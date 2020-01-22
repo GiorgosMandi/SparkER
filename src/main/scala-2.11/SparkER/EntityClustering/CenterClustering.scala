@@ -16,7 +16,7 @@ object CenterClustering extends EntityClusteringTrait {
       (x._1, edgesWeight / edgesAttached)
     }
 
-    val statsB = SparkContext.getOrCreate().broadcast(stats.collectAsMap()) // <-- Warning: Expensive and costly action
+    val statsB = SparkContext.getOrCreate().broadcast(stats.collectAsMap())
 
     /** Generates the connected components */
     val cc = connectedComponents(filteredEdges)
